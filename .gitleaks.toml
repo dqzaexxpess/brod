@@ -1,0 +1,27 @@
+# Правила gitleaks по умолчанию плюс исключения. Исключаем только заведомо тестовые значения, и только по пути файла.
+title = "brod"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "тестовый ключ WireGuard в тестах и каталоги вне git"
+paths = [
+  '''^engine/switch_test\.go$''',
+  '''^api/api_test\.go$''',
+  # синтетические значения в тестах (последовательности, повторы), проверено вручную:
+  '''^tgproxy/tgproxy_test\.go$''',
+  '''^tgproxy/prefilter_test\.go$''',
+  '''^core/refresh_test\.go$''',
+  # фиктивный приватный ключ и публичный ключ сервера Cloudflare WARP (одинаков у всех, не секрет):
+  '''^core/warp_test\.go$''',
+  # тестовый ключ из набора тестов самого форка движка (встречается в исходниках автора), внутри патча:
+  '''^patches/lx/0010-wireguard-client-bind-interrupt-on-close\.patch$''',
+  '''^work/''',
+  '''^bin/''',
+]
+
+# синтетический приватный ключ теста wg-quick в core/own_test.go (base64 последовательности 0..31; публичный ключ рядом это ключ сервера Cloudflare WARP, он не секрет)
+regexes = [
+  '''AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=''',
+]

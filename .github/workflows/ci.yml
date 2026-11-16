@@ -1,0 +1,105 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go:
+    name: "Go: тесты с -race и кросс-сборка Windows"
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      # go.mod подменяет sing-box на work/src/lx (в git его нет): тот же скрипт, что и локально, закреплён на коммит
+      - name: Исходники движка
+        run: scripts/fetch-engine.sh
+
+      # закреплённый по SHA-256 xray для приёмочных тестов; Actions выставляет CI=true, и без bin/xray тесты падают, а не пропускаются
+      - name: Xray для приёмочных тестов
+        run: scripts/fetch-xray.sh
+
+      - name: Тесты (-race)
+        env:
+          CGO_ENABLED: "1"
+        run: |
+          pkgs=$(find . -name '*_test.go' -not -path './work/*' -not -path './app/*' -printf '%h\n' | sort -u)
+          go test -race -count=1 -tags "$(cat scripts/tags.txt)" $pkgs
+
+      # T-8: синтаксис правил киллсвитча проверяет сам nft -c (нужен root); без root в обычном прогоне эти тесты пропускаются
+      - name: Правила nft (nft -c, под root)
+        run: |
+          sudo apt-get install -y --no-install-recommends nftables
+          sudo -E env "PATH=$PATH" BROD_REQUIRE_NFT=1 go test -count=1 -run 'PassesNftCheck|RejectsBrokenRuleset' ./killswitch
+
+      - name: Скрипты Windows (синтаксис)
+        run: scripts/check-ps1.sh
+
+      # brodd.exe без -checklinkname=0 не линкуется (tfo-go), brodctl.exe — без флага
+      - name: Сборка под Windows
+        env:
+          CGO_ENABLED: "0"
+          GOOS: windows
+          GOARCH: amd64
+        run: |
+          go build -tags "$(cat scripts/tags.txt)" -trimpath -ldflags=-checklinkname=0 -o /dev/null ./cmd/brodd
+          go build -tags "$(cat scripts/tags.txt)" -trimpath -o /dev/null ./cmd/brodctl
+
+  flutter:
+    name: "Flutter: analyze и test"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: stable
+          flutter-version: 3.47.9
+          cache: true
+
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+
+  # поиск секретов и известных уязвимостей. Инструменты закреплены: gitleaks по SHA-256 архива (scripts/fetch-gitleaks.sh),
+  # govulncheck по версии модуля (scripts/vulncheck.sh; подлинность — через базу контрольных сумм модулей Go)
+  security:
+    name: "Секреты (gitleaks) и уязвимости (govulncheck)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0 # gitleaks читает всю историю
+
+      - name: gitleaks (история и дерево)
+        run: scripts/secretscan.sh
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Исходники движка
+        run: scripts/fetch-engine.sh
+
+      - name: govulncheck
+        run: scripts/vulncheck.sh

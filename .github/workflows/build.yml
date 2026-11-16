@@ -1,0 +1,274 @@
+name: build
+
+# Сборки для проверки на устройствах; запускаются вручную: gh workflow run build.yml -f target=android|windows|all
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Что собирать"
+        type: choice
+        options: [all, android, windows, aar]
+        default: all
+      mode:
+        description: "Сборка Android: release (быстрая, для проверки плавности) или debug (с отладкой)"
+        type: choice
+        options: [release, debug]
+        default: release
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    name: "Android: APK"
+    if: inputs.target == 'all' || inputs.target == 'android'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: stable
+          flutter-version: 3.47.9
+          cache: true
+
+      # ядро (AAR) пересобирается только когда меняется Go-код, патчи, теги или вшитый список источников: правки интерфейса и Kotlin
+      # идут без этих ~5 минут
+      - name: Кэш ядра (AAR)
+        id: aar
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: app/android/app/libs/brodcore.aar
+          key: aar-${{ hashFiles('**/*.go', '!**/*_test.go', 'go.mod', 'go.sum', 'patches/**', 'scripts/tags.txt', 'scripts/fetch-engine.sh', 'androidcore/sources.txt', '.github/workflows/build.yml') }}
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        if: steps.aar.outputs.cache-hit != 'true'
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Исходники движка
+        if: steps.aar.outputs.cache-hit != 'true'
+        run: scripts/fetch-engine.sh
+
+      - name: gomobile (форк sagernet)
+        if: steps.aar.outputs.cache-hit != 'true'
+        run: |
+          go install github.com/sagernet/gomobile/cmd/gomobile@v0.1.13
+          go install github.com/sagernet/gomobile/cmd/gobind@v0.1.13
+
+      # ядро: тот же набор тегов, что у демона; NDK 27.3 (проверен апстримом libbox); -javapkg как у апстрима
+      - name: Ядро (AAR)
+        if: steps.aar.outputs.cache-hit != 'true'
+        env:
+          ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/27.3.13750724
+        run: |
+          mkdir -p app/android/app/libs
+          gomobile bind -v -o app/android/app/libs/brodcore.aar -target android/arm64 -androidapi 24 -javapkg=io.nekohasekai -libname=box \
+            -trimpath -buildvcs=false -ldflags="-checklinkname=0 -s -w -X runtime.godebugDefault=madvdontneed=1" -tags "$(cat scripts/tags.txt)" \
+            brod/androidcore github.com/sagernet/sing-box/experimental/libbox
+
+      - name: Кэш Gradle
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ hashFiles('app/android/**/*.gradle*', 'app/android/gradle/wrapper/gradle-wrapper.properties', 'app/pubspec.lock') }}
+          restore-keys: gradle-
+
+      # ключа подписи в этом задании нет (здесь выполняются Flutter, Dart-пакеты и плагины Gradle, то есть сторонний код).
+      # release собирается неподписанным (BROD_UNSIGNED=1) и подписывается отдельным заданием sign-android.
+      # debug подписывается отладочным ключом Android и в подпись не идёт.
+      - name: Сборка APK
+        env:
+          BROD_UNSIGNED: ${{ (inputs.mode || 'release') == 'release' && '1' || '' }}
+          BROD_ALLOW_DEBUG_SIGNING: ${{ (inputs.mode || 'release') == 'debug' && '1' || '' }}
+        working-directory: app
+        run: |
+          flutter pub get
+          flutter build apk --${{ inputs.mode || 'release' }} --target-platform android-arm64
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ (inputs.mode || 'release') == 'release' && 'brod-android-unsigned' || 'brod-android' }}
+          path: app/build/app/outputs/flutter-apk/app-*.apk
+          if-no-files-found: error
+          retention-days: ${{ (inputs.mode || 'release') == 'release' && 1 || 90 }}
+
+  # подпись отдельным заданием. Нет checkout, Flutter, Go и Gradle, нет сторонних действий кроме официальных download/upload-artifact
+  # (закреплены по хэшу); доступны только неподписанный APK, ключ и apksigner из SDK раннера.
+  sign-android:
+    name: "Android: подпись APK (только ключ и apksigner)"
+    needs: android
+    if: (inputs.mode || 'release') == 'release'
+    # окружение с обязательным ревьюером (Settings → Environments → release): секреты подписи лежат в нём, и без ручного «Approve» задание не стартует
+    environment: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: brod-android-unsigned
+          path: unsigned
+
+      - name: Подпись и проверка
+        env:
+          KS_B64: ${{ secrets.BROD_KEYSTORE_B64 }}
+          BROD_KS_PASS: ${{ secrets.BROD_KS_PASS }}
+          BROD_KEY_ALIAS: ${{ secrets.BROD_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          [ -n "$KS_B64" ] && [ -n "$BROD_KS_PASS" ] || { echo "::error::нет секретов BROD_KEYSTORE_B64 и BROD_KS_PASS: release без ключа подписи не выпускается"; exit 1; }
+          apks=(unsigned/app-*.apk)
+          [ ${#apks[@]} -eq 1 ] && [ -f "${apks[0]}" ] || { echo "::error::в артефакте должен быть ровно один app-*.apk"; exit 1; }
+          sdk=${ANDROID_HOME:-/usr/local/lib/android/sdk}
+          apksigner=$(ls -d "$sdk"/build-tools/*/apksigner | sort -V | tail -1)
+          # ключ только во временном каталоге раннера и только на время подписи; пароль — через переменную окружения, не в командной строке
+          ks=$(mktemp); trap 'rm -f "$ks"' EXIT
+          echo "$KS_B64" | base64 -d > "$ks"
+          mkdir -p signed
+          "$apksigner" sign --ks "$ks" --ks-key-alias "${BROD_KEY_ALIAS:-brod}" --ks-pass env:BROD_KS_PASS --key-pass env:BROD_KS_PASS \
+            --v2-signing-enabled true --v3-signing-enabled true --out signed/app-release.apk "${apks[0]}"
+          "$apksigner" verify --verbose --print-certs signed/app-release.apk
+          sha256sum signed/app-release.apk
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: brod-android
+          path: signed/app-release.apk
+          if-no-files-found: error
+
+  aar:
+    name: "Android: ядро (androidcore + libbox) в AAR, arm64"
+    if: inputs.target == 'aar'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Исходники движка
+        run: scripts/fetch-engine.sh
+
+      - name: gomobile (форк sagernet)
+        run: |
+          go install github.com/sagernet/gomobile/cmd/gomobile@v0.1.13
+          go install github.com/sagernet/gomobile/cmd/gobind@v0.1.13
+
+      # NDK 27.3: на раннере есть и 30.x, но libbox собирается проверенным у апстрима 27; -javapkg как у апстрима (в libbox есть
+      # привязки к именам Java-классов)
+      - name: AAR
+        env:
+          ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/27.3.13750724
+        run: |
+          mkdir -p dist
+          gomobile bind -v -o dist/brodcore.aar -target android/arm64 -androidapi 24 -javapkg=io.nekohasekai -libname=box \
+            -trimpath -buildvcs=false -ldflags="-checklinkname=0 -s -w -X runtime.godebugDefault=madvdontneed=1" -tags "$(cat scripts/tags.txt)" \
+            brod/androidcore github.com/sagernet/sing-box/experimental/libbox
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: brodcore-aar
+          path: dist/brodcore.aar
+          if-no-files-found: error
+
+  windows:
+    name: "Windows: brodd.exe, brodctl.exe и приложение"
+    if: inputs.target == 'all' || inputs.target == 'windows'
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Исходники движка
+        run: scripts/fetch-engine.sh
+
+      # T-5: тесты *_windows_test.go (раскладка структур WFP, netid, memwatch, метрика сети) нигде больше не исполняются
+      - name: Тесты Go под Windows
+        env:
+          CGO_ENABLED: "0"
+        run: go test -count=1 -tags "$(cat scripts/tags.txt)" -ldflags=-checklinkname=0 ./killswitch ./store ./memwatch ./paths ./cmd/brodd ./updater
+
+      # на раннере есть powershell: настоящий парсер ([System.Management.Automation.Language.Parser])
+      - name: Разбор install.ps1 и uninstall.ps1
+        run: scripts/check-ps1.sh
+
+      - name: Демон и CLI
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          mkdir -p dist
+          # демон как GUI-приложение: задача планировщика не открывает окно консоли (закрытие которого убивало демон); журнал — brodd.log
+          go build -tags "$(cat scripts/tags.txt)" -trimpath -ldflags="-checklinkname=0 -H windowsgui" -o dist/brodd.exe ./cmd/brodd
+          go build -tags "$(cat scripts/tags.txt)" -trimpath -o dist/brodctl.exe ./cmd/brodctl
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: stable
+          flutter-version: 3.47.9
+          cache: true
+
+      - name: Приложение
+        working-directory: app
+        run: |
+          flutter pub get
+          flutter build windows --release
+
+      - name: wintun.dll (драйвер TUN для Windows)
+        run: |
+          curl -sSL --fail --retry 3 -o wintun.zip https://www.wintun.net/builds/wintun-0.14.1.zip
+          echo "wintun-0.14.1.zip SHA-256: $(sha256sum wintun.zip | cut -d' ' -f1)"
+          echo "07c256185d6ee3652e09fa55c0b673e2624b565e02c4b9091c79ca7d2f24ef51  wintun.zip" | sha256sum -c -
+          powershell -NoProfile -Command "Expand-Archive -Path wintun.zip -DestinationPath wintun -Force"
+          cp wintun/wintun/bin/amd64/wintun.dll dist/
+
+      - name: Сборка в один каталог
+        run: |
+          mkdir -p dist/brod
+          cp -r app/build/windows/x64/runner/Release/. dist/brod/
+          cp dist/brodd.exe dist/brodctl.exe dist/wintun.dll dist/brod/
+          cp deploy/windows/install.ps1 deploy/windows/uninstall.ps1 dist/brod/
+
+      # архив релиза для кнопки «Установить»: тот же состав плюс метка «версия платформа»
+      - name: Архив релиза
+        run: |
+          VER=$(sed -n 's/^const Version = "\(.*\)"$/\1/p' buildinfo/buildinfo.go)
+          printf '%s windows-amd64\n' "$VER" > dist/brod/BROD-RELEASE
+          powershell -NoProfile -Command "Compress-Archive -Path dist/brod/* -DestinationPath dist/brod-$VER-windows-amd64.zip -Force"
+          echo "brod-$VER-windows-amd64.zip sha256 $(sha256sum dist/brod-$VER-windows-amd64.zip | cut -d' ' -f1)"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: brod-windows
+          path: dist/brod
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: brod-windows-release
+          path: dist/brod-*-windows-amd64.zip
+          if-no-files-found: error
