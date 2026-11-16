@@ -1,0 +1,86 @@
+diff --git a/adapter/endpoint.go b/adapter/endpoint.go
+index 63d7ce9..71c1659 100644
+--- a/adapter/endpoint.go
++++ b/adapter/endpoint.go
+@@ -25,4 +25,10 @@ type EndpointManager interface {
+ 	Endpoints() []Endpoint
+ 	Get(tag string) (Endpoint, bool)
+ 	Create(ctx context.Context, router Router, logger log.ContextLogger, tag string, endpointType string, options any) error
++	// lx:begin remove
++	// StartDynamic проводит endpoint, созданный через Create уже после запуска движка, через все стадии запуска.
++	StartDynamic(endpoint Endpoint) error
++	// Remove останавливает и убирает endpoint. Что на него ссылается, менеджер не знает: проверка зависимостей на вызывающем.
++	Remove(tag string) error
++	// lx:end remove
+ }
+diff --git a/adapter/endpoint/manager.go b/adapter/endpoint/manager.go
+index 9ab31d9..b9bd074 100644
+--- a/adapter/endpoint/manager.go
++++ b/adapter/endpoint/manager.go
+@@ -2,6 +2,7 @@ package endpoint
+ 
+ import (
+ 	"context"
++	"os"
+ 	"sync"
+ 
+ 	"github.com/sagernet/sing-box/adapter"
+@@ -98,3 +99,58 @@ func (m *Manager) Create(ctx context.Context, router adapter.Router, logger log.
+ 	m.optionsByTag[tag] = managedOptions{endpointType: outboundType, options: options} // lx: chain
+ 	return nil
+ }
++
++// lx:begin remove
++
++// StartDynamic проводит endpoint, добавленный после старта движка, через все стадии запуска в его собственном scope.
++func (m *Manager) StartDynamic(endpoint adapter.Endpoint) error {
++	name := "endpoint/" + endpoint.Type() + "[" + endpoint.Tag() + "]"
++	m.access.Lock()
++	if m.scope == nil {
++		m.access.Unlock()
++		return E.New("endpoint manager is not started")
++	}
++	endpointScope := m.endpointScope(endpoint)
++	m.access.Unlock()
++	for _, stage := range adapter.ListStartStages {
++		if err := endpointScope.Start(name, endpoint, stage); err != nil {
++			return err
++		}
++	}
++	return nil
++}
++
++// Remove останавливает endpoint (закрывает его scope) и убирает из менеджера.
++func (m *Manager) Remove(tag string) error {
++	m.access.Lock()
++	endpoint, found := m.endpointByTag[tag]
++	if !found {
++		m.access.Unlock()
++		return os.ErrNotExist
++	}
++	remaining := make([]adapter.Endpoint, 0, len(m.endpoints))
++	for _, e := range m.endpoints {
++		if e != endpoint {
++			remaining = append(remaining, e)
++		}
++	}
++	m.endpoints = remaining
++	delete(m.endpointByTag, tag)
++	delete(m.optionsByTag, tag)
++	endpointScope := m.endpointScopes[endpoint]
++	delete(m.endpointScopes, endpoint)
++	closers := make([]endpointCloser, 0, len(m.endpointClosers))
++	for _, c := range m.endpointClosers {
++		if c.scope != endpointScope {
++			closers = append(closers, c)
++		}
++	}
++	m.endpointClosers = closers
++	m.access.Unlock()
++	if endpointScope == nil {
++		return nil
++	}
++	return endpointScope.Close()
++}
++
++// lx:end remove

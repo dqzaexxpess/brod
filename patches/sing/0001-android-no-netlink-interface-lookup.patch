@@ -1,0 +1,47 @@
+diff --git a/common/control/bind_finder_default.go b/common/control/bind_finder_default.go
+index f207f25..ea7c2e5 100644
+--- a/common/control/bind_finder_default.go
++++ b/common/control/bind_finder_default.go
+@@ -3,6 +3,7 @@ package control
+ import (
+ 	"net"
+ 	"net/netip"
++	"runtime"
+ 	"strconv"
+ 	"sync"
+ 
+@@ -23,7 +24,14 @@ func NewDefaultInterfaceFinder() *DefaultInterfaceFinder {
+ 	return &DefaultInterfaceFinder{}
+ }
+ 
++// Brod: на Android приложению запрещён bind сокета netlink (SELinux, Android 11+), net.Interfaces/InterfaceByName/InterfaceByIndex каждый раз
++// заканчиваются отказом и пишут в журнал аудита. Список интерфейсов там задаёт платформа (UpdateInterfaces), поэтому системный опрос пропускается.
++var skipSystemInterfaces = runtime.GOOS == "android"
++
+ func (f *DefaultInterfaceFinder) Update() error {
++	if skipSystemInterfaces {
++		return nil
++	}
+ 	netIfs, err := net.Interfaces()
+ 	if err != nil {
+ 		return err
+@@ -80,6 +88,9 @@ func (f *DefaultInterfaceFinder) ByName(name string) (*Interface, error) {
+ 		}
+ 	}
+ 	f.access.RUnlock()
++	if skipSystemInterfaces {
++		return nil, &net.OpError{Op: "route", Net: "ip+net", Source: nil, Addr: &net.IPAddr{IP: nil}, Err: E.New("no such network interface")}
++	}
+ 	_, err := net.InterfaceByName(name)
+ 	if err == nil {
+ 		err = f.Update()
+@@ -100,6 +111,9 @@ func (f *DefaultInterfaceFinder) ByIndex(index int) (*Interface, error) {
+ 		}
+ 	}
+ 	f.access.RUnlock()
++	if skipSystemInterfaces {
++		return nil, &net.OpError{Op: "route", Net: "ip+net", Source: nil, Addr: &net.IPAddr{IP: nil}, Err: E.New("no such network interface")}
++	}
+ 	_, err := net.InterfaceByIndex(index)
+ 	if err == nil {
+ 		err = f.Update()

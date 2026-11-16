@@ -1,0 +1,26 @@
+diff --git a/experimental/libbox/platform_export_lx.go b/experimental/libbox/platform_export_lx.go
+new file mode 100644
+index 0000000..2dbd372
+--- /dev/null
++++ b/experimental/libbox/platform_export_lx.go
+@@ -0,0 +1,20 @@
++package libbox
++
++import (
++	"context"
++
++	"github.com/sagernet/sing-box/adapter"
++	"github.com/sagernet/sing-box/service/powerreport"
++	"github.com/sagernet/sing/service"
++)
++
++// RegisterPlatform (lx, Brod): регистрирует платформенный интерфейс (Android VpnService и др.) в контексте движка так же, как это
++// делает NewCommandServer, но для встраивания движка в чужой процесс со своим реестром outbound'ов: контекст собирает вызывающий.
++func RegisterPlatform(ctx context.Context, platformInterface PlatformInterface) {
++	powerManager := powerreport.NewManager()
++	service.MustRegister[*powerreport.Manager](ctx, powerManager)
++	service.MustRegister[adapter.PlatformInterface](ctx, &platformInterfaceWrapper{
++		iif:          platformInterface,
++		powerManager: powerManager,
++	})
++}

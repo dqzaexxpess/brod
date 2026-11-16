@@ -1,0 +1,29 @@
+diff --git a/transport/wireguard/device_stack.go b/transport/wireguard/device_stack.go
+index ab1a86e..b4b1883 100644
+--- a/transport/wireguard/device_stack.go
++++ b/transport/wireguard/device_stack.go
+@@ -8,6 +8,7 @@ import (
+ 	"net/netip"
+ 	"os"
+ 	"sync"
++	"time"
+ 
+ 	"github.com/sagernet/gvisor/pkg/buffer"
+ 	"github.com/sagernet/gvisor/pkg/tcpip"
+@@ -277,7 +278,15 @@ func (w *stackDevice) Close() error {
+ 		for _, endpoint := range w.stack.CleanupEndpoints() {
+ 			endpoint.Abort()
+ 		}
+-		w.stack.Wait()
++		// lx (Brod): Stack.Wait ждёт все TCP-endpoint'ы гвизора; endpoint, застрявший в дозвоне (цепочка WARP → узел с молчащим DNS), держит
++		// закрытие до таймаута дозвона (замер на телефоне 2026-11-16: остановка ядра 15 с, на ней висят переключатель VPN и приложение).
++		// Стек уже закрыт и его endpoint'ы прерваны (Abort выше), поэтому ждём ограниченно.
++		waited := make(chan struct{})
++		go func() { w.stack.Wait(); close(waited) }()
++		select {
++		case <-waited:
++		case <-time.After(2 * time.Second):
++		}
+ 	})
+ 	return nil
+ }

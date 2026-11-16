@@ -1,0 +1,77 @@
+diff --git a/constant/v2ray.go b/constant/v2ray.go
+index 997a199..fa175db 100644
+--- a/constant/v2ray.go
++++ b/constant/v2ray.go
+@@ -8,4 +8,7 @@ const (
+ 	V2RayTransportTypeHTTPUpgrade = "httpupgrade"
+ 	// lx: XHTTP transport (Xray-compatible), registered behind build tag with_xhttp. See SPECS/TASKS/002.
+ 	V2RayTransportTypeXHTTP = "xhttp"
++	// lx:begin raw
++	V2RayTransportTypeRaw = "raw"
++	// lx:end raw
+ )
+diff --git a/option/v2ray_raw.go b/option/v2ray_raw.go
+new file mode 100644
+index 0000000..503a064
+--- /dev/null
++++ b/option/v2ray_raw.go
+@@ -0,0 +1,23 @@
++package option
++
++import "github.com/sagernet/sing/common/json/badoption"
++
++// lx:begin raw
++
++// V2RayRawOptions — транспорт "raw" (TCP) с необязательной HTTP-обфускацией заголовка, как `headerType: http` в Xray/V2Ray.
++// Реализация клиента — плагин вне ядра (vpnclient/ext/rawhttp), регистрируется через transport/v2ray.RegisterClient;
++// без плагина тип "raw" отвергается рантаймом ("unknown transport type: raw").
++type V2RayRawOptions struct {
++	// HeaderType: "" / "none" — без обфускации; "http" — фальшивый HTTP-запрос в начале потока и пропуск HTTP-ответа сервера.
++	HeaderType string `json:"header_type,omitempty"`
++	// Method — метод фальшивого запроса (по умолчанию GET).
++	Method string `json:"method,omitempty"`
++	// Host — значения заголовка Host (выбирается случайное на соединение); пусто — SNI/адрес сервера.
++	Host badoption.Listable[string] `json:"host,omitempty"`
++	// Path — пути запроса (выбирается случайный на соединение); пусто — "/".
++	Path badoption.Listable[string] `json:"path,omitempty"`
++	// Headers — дополнительные заголовки запроса.
++	Headers badoption.HTTPHeader `json:"headers,omitempty"`
++}
++
++// lx:end raw
+diff --git a/option/v2ray_transport.go b/option/v2ray_transport.go
+index af8d625..82b685c 100644
+--- a/option/v2ray_transport.go
++++ b/option/v2ray_transport.go
+@@ -21,6 +21,9 @@ type _V2RayTransportOptions struct {
+ 	// lx:begin xhttp
+ 	XHTTPOptions V2RayXHTTPOptions `json:"-"`
+ 	// lx:end xhttp
++	// lx:begin raw
++	RawOptions V2RayRawOptions `json:"-"`
++	// lx:end raw
+ }
+ 
+ type V2RayTransportOptions _V2RayTransportOptions
+@@ -42,6 +45,10 @@ func (o V2RayTransportOptions) MarshalJSON() ([]byte, error) {
+ 	case C.V2RayTransportTypeXHTTP:
+ 		v = o.XHTTPOptions
+ 	// lx:end xhttp
++	// lx:begin raw
++	case C.V2RayTransportTypeRaw:
++		v = o.RawOptions
++	// lx:end raw
+ 	case "":
+ 		return nil, E.New("missing transport type")
+ 	default:
+@@ -71,6 +78,10 @@ func (o *V2RayTransportOptions) UnmarshalJSON(bytes []byte) error {
+ 	case C.V2RayTransportTypeXHTTP:
+ 		v = &o.XHTTPOptions
+ 	// lx:end xhttp
++	// lx:begin raw
++	case C.V2RayTransportTypeRaw:
++		v = &o.RawOptions
++	// lx:end raw
+ 	default:
+ 		return E.New("unknown transport type: " + o.Type)
+ 	}

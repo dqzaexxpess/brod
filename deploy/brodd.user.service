@@ -1,0 +1,34 @@
+# Пользовательский юнит systemd: brodd без прав администратора (вход для приложений на 127.0.0.1, режим TUN сюда не входит).
+# Установка: deploy/install-user.sh [--enable]. Вручную:
+#   mkdir -p ~/.config/systemd/user && cp deploy/brodd.user.service ~/.config/systemd/user/brodd.service
+#   systemctl --user daemon-reload && systemctl --user enable --now brodd
+[Unit]
+Description=Brod: демон подписок, проверок и целей
+Documentation=file://%h/dev/vpn-client/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Дополнительные источники: файл «имя|url|приоритет» (если файла нет — только источники по умолчанию); SIGHUP перечитывает
+# демон ставит помощник от root в /usr/local/lib/brod (deploy/install-helper.sh + deploy/install-linux.sh). Права для TUN юниту всё
+# равно не достаются: NoNewPrivileges=yes отключает права файла при запуске. deploy/install-user.sh (сборка разработки в ~/.local/bin)
+# при установке юнита подставляет путь %h/.local/bin/brodd.
+ExecStart=/usr/local/lib/brod/brodd --sources-file %h/.config/brod/sources.txt
+# SIGHUP — перечитать файл источников
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=3
+# Остановка: демон закрывает сокет и базу за считанные секунды
+TimeoutStopSec=15
+# Ограничения, не требующие привилегий (песочницы с пространствами имён в пользовательских юнитах на Ubuntu 25.04 отключены AppArmor-ом)
+NoNewPrivileges=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+RestrictRealtime=yes
+# Журнал движка пишется в файл состояния (0600); сюда идёт только лог самого демона без секретов
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

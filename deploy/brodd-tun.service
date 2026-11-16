@@ -1,0 +1,44 @@
+# ЗАГОТОВКА для режима TUN (Ф3 «хвост», нужен sudo): в демоне TUN-вход ещё не реализован, этот юнит — для проверки привилегий.
+# Системный юнит с минимальными capabilities: ни root, ни полного доступа к системе.
+#   sudo useradd --system --home-dir /var/lib/brod --shell /usr/sbin/nologin brod
+#   sudo cp deploy/brodd-tun.service /etc/systemd/system/brodd-tun.service
+#   sudo cp bin/brodd /usr/local/bin/brodd
+#   sudo systemctl daemon-reload && sudo systemctl enable --now brodd-tun
+# До этого проверьте: NetworkManager не управляет интерфейсом (deploy/NetworkManager-brod.conf) и DNS настроен (deploy/README.md).
+[Unit]
+Description=Brod (TUN): демон с правами на сетевые интерфейсы
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=brod
+Group=brod
+Environment=BROD_STATE=/var/lib/brod
+Environment=BROD_SOCK=/run/brod/brod.sock
+ExecStart=/usr/local/bin/brodd --no-notify
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=3
+StateDirectory=brod
+StateDirectoryMode=0700
+RuntimeDirectory=brod
+RuntimeDirectoryMode=0750
+# Только то, что нужно для создания TUN и маршрутов; остальное отнято
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_NET_RAW
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+RestrictRealtime=yes
+DeviceAllow=/dev/net/tun rw
+ReadWritePaths=/var/lib/brod /run/brod
+
+[Install]
+WantedBy=multi-user.target

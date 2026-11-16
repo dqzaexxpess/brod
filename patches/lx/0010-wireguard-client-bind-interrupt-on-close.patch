@@ -1,0 +1,304 @@
+diff --git a/submodules/wireguard-go/device/device.go b/submodules/wireguard-go/device/device.go
+--- a/submodules/wireguard-go/device/device.go
++++ b/submodules/wireguard-go/device/device.go
+@@ -840,6 +840,7 @@
+ }
+ 
+ func (device *Device) BindUpdate() error {
++	device.interruptBind() // lx: sing-box-lx SPEC 071 — see lx_bind_interrupt.go
+ 	device.net.Lock()
+ 	defer device.net.Unlock()
+ 
+@@ -900,6 +901,7 @@
+ }
+ 
+ func (device *Device) BindClose() error {
++	device.interruptBind() // lx: sing-box-lx SPEC 071 — see lx_bind_interrupt.go
+ 	device.net.Lock()
+ 	err := closeBindLocked(device)
+ 	device.net.Unlock()
+diff --git a/submodules/wireguard-go/device/lx_bind_interrupt.go b/submodules/wireguard-go/device/lx_bind_interrupt.go
+new file mode 100644
+--- /dev/null
++++ b/submodules/wireguard-go/device/lx_bind_interrupt.go
+@@ -0,0 +1,32 @@
++/* SPDX-License-Identifier: MIT
++ *
++ * lx: sing-box-lx SPEC 071 — let a bind whose Send blocks give up before the
++ * device takes its net lock for writing.
++ */
++
++package device
++
++// bindInterrupter is implemented by a conn.Bind whose Send can block for long:
++// sing-box's ClientBind dials its detour connection inside Send (bounded only
++// by a 15 s dial timeout) and backs off for a second after a failed dial. Send
++// runs under device.net's read lock, and BindClose and BindUpdate close the
++// bind under the write lock, so Down, Close and every rebind waited for the
++// blocked Send to finish on its own: the bind's Close, which cancels the dial,
++// only runs once the write lock is held.
++//
++// InterruptPending must make pending and later Sends of the current bind
++// generation return promptly until the bind is opened again. It may run
++// concurrently with Send, Open and Close.
++type bindInterrupter interface {
++	InterruptPending()
++}
++
++// interruptBind runs right before BindClose and BindUpdate take device.net for
++// writing; both close the bind right after, so nothing is lost by giving up
++// early. device.net.bind is set once in NewDevice and never replaced, so it is
++// read without the lock.
++func (device *Device) interruptBind() {
++	if bind, ok := device.net.bind.(bindInterrupter); ok {
++		bind.InterruptPending()
++	}
++}
+diff --git a/transport/wireguard/client_bind.go b/transport/wireguard/client_bind.go
+--- a/transport/wireguard/client_bind.go
++++ b/transport/wireguard/client_bind.go
+@@ -43,6 +43,7 @@
+ 	isConnect           bool
+ 	connectAddr         netip.AddrPort
+ 	reserved            [3]uint8
++	interrupt           atomic.Pointer[context.CancelFunc] // lx: SPEC 071 — client_bind_interrupt_lx.go
+ }
+ 
+ func NewClientBind(ctx context.Context, logger logger.Logger, dialer N.Dialer, isConnect bool, connectAddr netip.AddrPort, reserved [3]uint8) *ClientBind {
+@@ -161,6 +162,7 @@
+ 	default:
+ 	}
+ 	c.bindCtx, c.bindDone = context.WithCancel(c.ctx)
++	c.armInterrupt(c.bindDone) // lx: SPEC 071 — client_bind_interrupt_lx.go
+ 	return []conn.ReceiveFunc{c.receive}, 0, nil
+ }
+ 
+@@ -229,7 +231,7 @@
+ func (c *ClientBind) Send(bufs [][]byte, ep conn.Endpoint, offset int) error {
+ 	udpConn, err := c.connect()
+ 	if err != nil {
+-		time.Sleep(time.Second)
++		c.sendBackoff() // lx: SPEC 071 — was time.Sleep(time.Second), see client_bind_interrupt_lx.go
+ 		return err
+ 	}
+ 	destination := netip.AddrPort(ep.(remoteEndpoint))
+diff --git a/transport/wireguard/client_bind_interrupt_lx.go b/transport/wireguard/client_bind_interrupt_lx.go
+new file mode 100644
+--- /dev/null
++++ b/transport/wireguard/client_bind_interrupt_lx.go
+@@ -0,0 +1,54 @@
++package wireguard
++
++import (
++	"context"
++	"time"
++)
++
++// lx: SPEC 071 — a Send stuck in the bind must not hold up the bind's close.
++//
++// wireguard-go calls Send under the device's net read lock and closes the bind
++// (BindClose on Down/Close, BindUpdate on a rebind) under the write lock. Send
++// can stay inside for long: connect() dials the detour for up to
++// clientBindDialTimeout (15 s), either itself or behind the receive loop's dial
++// on connAccess, and after a failed connect() Send backs off for a second.
++// Close cancels the dial, but the device calls it only once it holds the write
++// lock, that is once Send has returned on its own: Down and Close of the
++// endpoint waited for the rest of the dial or of the backoff.
++//
++// The device now calls InterruptPending right before it takes the write lock
++// (wireguard-go lx_bind_interrupt.go). It cancels bindCtx: the pending dial
++// (its context derives from bindCtx) fails at once, a dial started after it
++// fails at once too, and the backoff below returns. bindCtx stays cancelled
++// until Open makes a new one, and the device closes the bind right after the
++// interrupt, so nothing is lost by giving up early.
++
++// armInterrupt publishes the cancel func of the bind generation Open has just
++// created. Open runs under the device's net write lock, InterruptPending
++// without it, hence the atomic.
++func (c *ClientBind) armInterrupt(cancel context.CancelFunc) {
++	c.interrupt.Store(&cancel)
++}
++
++// InterruptPending implements wireguard-go's bind interrupter. Safe to call
++// concurrently with Send, Open and Close; a cancel func of a generation that
++// is already closed is a no-op.
++func (c *ClientBind) InterruptPending() {
++	if cancel := c.interrupt.Load(); cancel != nil {
++		(*cancel)()
++	}
++}
++
++// sendBackoff is the pause after a failed connect() in Send. It keeps the
++// upstream rate (one dial attempt per second while the detour is down) but
++// returns as soon as the bind generation is interrupted or closed. bindCtx is
++// written by Open under the device's net write lock and read here under its
++// read lock.
++func (c *ClientBind) sendBackoff() {
++	timer := time.NewTimer(time.Second)
++	defer timer.Stop()
++	select {
++	case <-timer.C:
++	case <-c.bindCtx.Done():
++	}
++}
+diff --git a/transport/wireguard/client_bind_close_lx_test.go b/transport/wireguard/client_bind_close_lx_test.go
+new file mode 100644
+--- /dev/null
++++ b/transport/wireguard/client_bind_close_lx_test.go
+@@ -0,0 +1,156 @@
++//go:build with_gvisor
++
++package wireguard
++
++// lx: SPEC 071 — closing an endpoint whose ClientBind is stuck in Send.
++//
++// wireguard-go calls bind.Send under the device's net read lock, and closes
++// the bind (BindClose, BindUpdate) under the write lock. ClientBind.Send can
++// stay inside for a long time: the detour dial in connect() runs up to
++// clientBindDialTimeout (C.TCPTimeout, 15 s), and after a failed connect() it
++// backs off for a second. ClientBind.Close is what cancels both, but the
++// device calls it only after it holds the write lock, that is only after Send
++// has returned. Down/Close of the endpoint therefore waited for the rest of
++// the dial (up to 15 s) or of the backoff (up to 1 s). These tests drive a real
++// endpoint (gVisor stack device, ClientBind over a fake detour dialer) and
++// time Close while a handshake Send is stuck.
++
++import (
++	"context"
++	"errors"
++	"net"
++	"net/netip"
++	"testing"
++	"time"
++
++	"github.com/sagernet/sing/common/logger"
++	M "github.com/sagernet/sing/common/metadata"
++	N "github.com/sagernet/sing/common/network"
++	"github.com/sagernet/sing/service/pause"
++)
++
++// closeBoundLx is the time Close may take once a Send is stuck. Generous
++// against scheduler noise (the fixed Close takes a few milliseconds), and well
++// under the one-second backoff it guards against.
++const closeBoundLx = 400 * time.Millisecond
++
++// failingDialer fails every dial at once: a detour that refuses connections.
++type failingDialer struct{}
++
++func (failingDialer) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
++	return nil, errors.New("detour refused")
++}
++
++func (failingDialer) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
++	return nil, errors.New("detour refused")
++}
++
++// newClientBindTestEndpoint starts a live endpoint whose bind is a ClientBind
++// over outboundDialer (not a dialer.UDPListener) and asks it to send a packet,
++// which makes the device send a handshake initiation through Send. It returns
++// once that write is provably stuck in Send, with a channel closed when the
++// write returns.
++func newClientBindTestEndpoint(t *testing.T, outboundDialer N.Dialer) (*Endpoint, <-chan struct{}) {
++	t.Helper()
++	e, err := NewEndpoint(EndpointOptions{
++		Context:    pause.WithDefaultManager(context.Background()), // ClientBind waits on it after a failed connect
++		Logger:     logger.NOP(),
++		Dialer:     outboundDialer,
++		Name:       "wg-clientbind",
++		MTU:        1408,
++		Address:    []netip.Prefix{netip.MustParsePrefix("10.0.0.2/32")},
++		PrivateKey: "iOx8sYFBnQjKMkTfTBaLZ5+DEHU4S3vzcSLp+HDaOWc=",
++		Peers: []PeerOptions{{
++			Endpoint:   mustSocksaddr("192.0.2.1:51820"),
++			PublicKey:  "eBpqZlJmSVBGNW9BOEZ4S3lRZTNQd0RhbWFnZTBTNTA=",
++			AllowedIPs: []netip.Prefix{netip.MustParsePrefix("0.0.0.0/0")},
++		}},
++	})
++	if err != nil {
++		t.Fatalf("endpoint construction failed: %v", err)
++	}
++	for _, postStart := range []bool{false, true} {
++		if err = e.Start(postStart); err != nil {
++			t.Fatal(err)
++		}
++	}
++	// The first packet makes the device initiate a handshake on the writing
++	// goroutine, so the write itself blocks in Send: issue it on the side.
++	// device.Up runs off the tun device's EventUp a beat after Start returns;
++	// a write that returns at once met a device that was not up yet (both
++	// dialers keep Send inside for at least a second), so retry it.
++	for attempt := 0; attempt < 20; attempt++ {
++		written := make(chan struct{})
++		go func() {
++			_ = e.WritePackets([][]byte{handshakeTriggerPacketLx()})
++			close(written)
++		}()
++		select {
++		case <-written:
++			continue
++		case <-time.After(200 * time.Millisecond):
++			return e, written
++		}
++	}
++	t.Fatal("precondition: the handshake initiation never got stuck in Send")
++	return nil, nil
++}
++
++func closeWithinLx(t *testing.T, e *Endpoint, written <-chan struct{}) {
++	t.Helper()
++	select {
++	case <-written:
++		t.Fatal("precondition: the write must still be stuck in Send when Close starts")
++	default:
++	}
++	closed := make(chan time.Duration, 1)
++	start := time.Now()
++	go func() {
++		_ = e.Close()
++		closed <- time.Since(start)
++	}()
++	select {
++	case elapsed := <-closed:
++		if elapsed > closeBoundLx {
++			t.Fatalf("Close took %v with a Send stuck in the bind, want under %v", elapsed, closeBoundLx)
++		}
++		t.Logf("Close took %v", elapsed)
++	case <-time.After(3 * time.Second):
++		t.Fatal("Close did not return within 3s: it waits for the Send stuck in the bind")
++	}
++	select {
++	case <-written:
++	case <-time.After(time.Second):
++		t.Fatal("the stuck write did not return after Close")
++	}
++}
++
++// A failed connect() used to sleep a second inside Send, under the device's
++// net read lock; Close waited for the rest of it.
++func TestCloseDuringSendBackoff(t *testing.T) {
++	for i := 0; i < 3; i++ {
++		e, written := newClientBindTestEndpoint(t, failingDialer{})
++		closeWithinLx(t, e, written)
++	}
++}
++
++// A detour dial that hangs (blockingDialer waits for its context) used to hold
++// Send for clientBindDialTimeout; Close waited for the dial to time out.
++func TestCloseDuringPendingDial(t *testing.T) {
++	e, written := newClientBindTestEndpoint(t, blockingDialer{})
++	closeWithinLx(t, e, written)
++}
++
++// handshakeTriggerPacketLx is a bare IPv4 header from the endpoint's address
++// to an address the peer's allowed IPs cover: staging it makes the device
++// initiate a handshake.
++func handshakeTriggerPacketLx() []byte {
++	packet := make([]byte, 20)
++	packet[0] = 0x45 // IPv4, 20-byte header
++	packet[3] = 20   // total length
++	packet[8] = 64   // TTL
++	packet[9] = 17   // UDP
++	copy(packet[12:16], []byte{10, 0, 0, 2})
++	copy(packet[16:20], []byte{10, 0, 0, 9})
++	return packet
++}

@@ -1,0 +1,331 @@
+diff --git a/transport/wireguard/endpoint.go b/transport/wireguard/endpoint.go
+--- a/transport/wireguard/endpoint.go
++++ b/transport/wireguard/endpoint.go
+@@ -247,12 +247,12 @@
+ 	if e.device != nil {
+ 		e.device.Down()
+ 		e.device.Close()
+-		e.device = nil
++		e.storeDevice(nil) // endpoint_snapshot_lx.go
+ 	}
+ 	e.resetSession() // lx: SPEC 145 — a rebuilt device counts from zero
+ 	e.pauseOpAccess.Unlock()
+ 	e.closeTunDevice()
+-	e.allowedIPs = nil
++	e.storeAllowedIPs(nil)
+ 	if e.pauseCallback != nil {
+ 		e.pause.UnregisterCallback(e.pauseCallback)
+ 		e.pauseCallback = nil
+@@ -272,14 +272,9 @@
+ 		return E.Cause(err, "rebuild WireGuard device")
+ 	}
+ 	e.tunDevice = tunDevice
+-	// Carry the attached L3 return path over to the fresh wrapper: sing-tun
+-	// attached it once (AttachReturn) and will not re-attach after a rebuild it
+-	// knows nothing about — dropping it would silently break the L3 downlink.
+-	returnDevice := &returnDeviceWrapper{Device: tunDevice}
+-	if previous := e.returnDevice.state.Load(); previous != nil {
+-		returnDevice.state.Store(previous)
+-	}
+-	e.returnDevice = returnDevice
++	// Carry the attached L3 return path over to the fresh wrapper, excluding a
++	// concurrent AttachReturn (endpoint_snapshot_lx.go).
++	e.replaceReturnDevice(tunDevice)
+ 	e.inet4Address = tunDevice.Inet4Address()
+ 	e.inet6Address = tunDevice.Inet6Address()
+ 	e.suspended.Store(false)
+@@ -424,12 +419,12 @@
+ 		wgDevice.Close()
+ 		return E.Cause(err, "setup wireguard: \n", ipcConf.String())
+ 	}
+-	e.device = wgDevice
++	e.storeDevice(wgDevice) // lx: SPEC 020 level 3 — endpoint_snapshot_lx.go
+ 	e.pause = service.FromContext[pause.Manager](e.options.Context)
+ 	if e.pause != nil {
+ 		e.pauseCallback = e.pause.RegisterCallback(e.onPauseUpdated)
+ 	}
+-	e.allowedIPs = wgDevice.AllowedIPs()
++	e.storeAllowedIPs(wgDevice.AllowedIPs()) // lx: SPEC 020 level 3 — endpoint_snapshot_lx.go
+ 	return nil
+ }
+ 
+@@ -467,7 +462,7 @@
+ 	if e.device != nil {
+ 		e.device.Down()
+ 		e.device.Close()
+-		e.device = nil
++		e.storeDevice(nil) // lx: SPEC 020 level 3 — endpoint_snapshot_lx.go
+ 		return nil
+ 	}
+ 	return e.closeTunDevice() // lx: SPEC 020 level 3 — see endpoint_close_lx.go
+@@ -560,17 +555,19 @@
+ // lx:end awg
+ 
+ func (e *Endpoint) Lookup(address netip.Addr) *device.Peer {
+-	if e.allowedIPs == nil {
++	allowedIPs := e.loadAllowedIPs() // lx: SPEC 020 level 3 — one snapshot, endpoint_snapshot_lx.go
++	if allowedIPs == nil {
+ 		return nil
+ 	}
+-	return e.allowedIPs.LookupFromPacket(netip.Addr{}, address, nil)
++	return allowedIPs.LookupFromPacket(netip.Addr{}, address, nil)
+ }
+ 
+ func (e *Endpoint) BindUpdate() error {
+-	if e.device == nil {
++	wgDevice := e.loadDevice() // lx: SPEC 020 level 3 — one snapshot, endpoint_snapshot_lx.go
++	if wgDevice == nil {
+ 		return nil
+ 	}
+-	return e.device.BindUpdate()
++	return wgDevice.BindUpdate()
+ }
+ 
+ // lx: SPEC 041 v2 — wake-nudge passthrough: rebind the device's socket now if
+diff --git a/transport/wireguard/port.go b/transport/wireguard/port.go
+--- a/transport/wireguard/port.go
++++ b/transport/wireguard/port.go
+@@ -23,7 +23,7 @@
+ }
+ 
+ func (e *Endpoint) WritePackets(packets [][]byte) error {
+-	wgDevice := e.device
++	wgDevice := e.loadDevice() // lx: SPEC 020 level 3 — endpoint_snapshot_lx.go
+ 	if wgDevice == nil {
+ 		return E.New("WireGuard device is not ready")
+ 	}
+@@ -90,6 +90,7 @@
+ }
+ 
+ func (e *Endpoint) AttachReturn(returnPath tun.Return) error {
++	defer e.holdReturnDevice()() // lx: SPEC 020 level 3 — endpoint_snapshot_lx.go
+ 	headroom := returnPath.ReturnHeadroom()
+ 	if headroom > device.MessageTransportOffsetContent {
+ 		return E.New("return path headroom ", headroom, " exceeds available ", device.MessageTransportOffsetContent)
+@@ -113,6 +114,7 @@
+ }
+ 
+ func (e *Endpoint) DetachReturn(returnPath tun.Return) error {
++	defer e.holdReturnDevice()() // lx: SPEC 020 level 3 — endpoint_snapshot_lx.go
+ 	currentState := e.returnDevice.state.Load()
+ 	if currentState != nil && currentState.returnPath == returnPath {
+ 		e.returnDevice.state.CompareAndSwap(currentState, nil)
+diff --git a/transport/wireguard/endpoint_snapshot_lx.go b/transport/wireguard/endpoint_snapshot_lx.go
+new file mode 100644
+--- /dev/null
++++ b/transport/wireguard/endpoint_snapshot_lx.go
+@@ -0,0 +1,73 @@
++package wireguard
++
++import (
++	"github.com/sagernet/wireguard-go/device"
++)
++
++// lx: SPEC 020 level 3 / SPEC 097 — one snapshot per call of the device
++// fields that Start and Rebuild set and Close and Teardown clear, for the
++// readers that run outside the protocol layer's locks:
++//
++//   - BindUpdate (InterfaceUpdated, under bindAccess) and Lookup
++//     (PreferredAddress, no lock) against Teardown by the build budget, which
++//     holds only resumeMu, and against Close, which runs after the protocol
++//     layer has dropped its locks;
++//   - WritePackets (L3 forward, no lock) against the same two;
++//   - AttachReturn and DetachReturn (sing-tun's forward dispatcher, no lock)
++//     against Rebuild replacing the return-path wrapper.
++//
++// A nil check followed by a second read of the field could see nil on the
++// second read and panic in the reader's goroutine. deviceAccess (endpoint.go)
++// is held only for the load or the store, never across a call on the device.
++// Readers that already run under pauseOpAccess or resumeMu, the same locks the
++// writers take, read the fields directly.
++
++func (e *Endpoint) loadDevice() *device.Device {
++	e.deviceAccess.RLock()
++	defer e.deviceAccess.RUnlock()
++	return e.device
++}
++
++func (e *Endpoint) storeDevice(wgDevice *device.Device) {
++	e.deviceAccess.Lock()
++	e.device = wgDevice
++	e.deviceAccess.Unlock()
++}
++
++func (e *Endpoint) loadAllowedIPs() *device.AllowedIPs {
++	e.deviceAccess.RLock()
++	defer e.deviceAccess.RUnlock()
++	return e.allowedIPs
++}
++
++func (e *Endpoint) storeAllowedIPs(allowedIPs *device.AllowedIPs) {
++	e.deviceAccess.Lock()
++	e.allowedIPs = allowedIPs
++	e.deviceAccess.Unlock()
++}
++
++// holdReturnDevice keeps Rebuild from replacing the return-path wrapper until
++// the returned func runs: AttachReturn and DetachReturn compare-and-swap the
++// state of e.returnDevice, and a swap that lands on the old wrapper after
++// Rebuild has copied its state is lost. sing-tun attaches once per port and
++// never again, so a lost attach silently breaks the L3 downlink. Use as
++//
++//	defer e.holdReturnDevice()()
++func (e *Endpoint) holdReturnDevice() (release func()) {
++	e.deviceAccess.RLock()
++	return e.deviceAccess.RUnlock
++}
++
++// replaceReturnDevice installs a fresh return-path wrapper around tunDevice
++// and carries the attached L3 return path over to it: sing-tun attached it
++// once (AttachReturn) and will not re-attach after a rebuild it knows nothing
++// about, so dropping it would silently break the L3 downlink.
++func (e *Endpoint) replaceReturnDevice(tunDevice Device) {
++	returnDevice := &returnDeviceWrapper{Device: tunDevice}
++	e.deviceAccess.Lock()
++	defer e.deviceAccess.Unlock()
++	if previous := e.returnDevice.state.Load(); previous != nil {
++		returnDevice.state.Store(previous)
++	}
++	e.returnDevice = returnDevice
++}
+diff --git a/transport/wireguard/endpoint_device_race_lx_test.go b/transport/wireguard/endpoint_device_race_lx_test.go
+new file mode 100644
+--- /dev/null
++++ b/transport/wireguard/endpoint_device_race_lx_test.go
+@@ -0,0 +1,136 @@
++//go:build with_gvisor
++
++package wireguard
++
++// lx: SPEC 020 level 3 / SPEC 097 — readers of the device fields that run
++// outside the protocol layer's locks, against the writers that clear or swap
++// those fields:
++//
++//   - BindUpdate (InterfaceUpdated, under bindAccess) and Lookup
++//     (PreferredAddress, no lock) against Teardown by the build budget, which
++//     holds only resumeMu;
++//   - WritePackets (L3 forward, no lock) against Close, which runs after the
++//     protocol layer has dropped its locks;
++//   - AttachReturn (sing-tun's forward dispatcher, no lock) against Rebuild
++//     replacing the return-path wrapper: an attach that lands on the old
++//     wrapper after Rebuild copied its state is lost, and the dispatcher never
++//     attaches again.
++//
++// A nil check followed by a second read of the field can see nil on the second
++// read and panic in the reader's goroutine. Run with -race: the detector
++// reports the unsynchronized accesses even when the scheduler misses the
++// window.
++
++import (
++	"net/netip"
++	"sync"
++	"testing"
++	"time"
++)
++
++func TestDeviceSnapshotRacesTeardownAndClose(t *testing.T) {
++	packet := ipv4PacketLx("10.0.0.2", "10.0.0.9")
++	for _, release := range []struct {
++		name string
++		fn   func(e *Endpoint)
++	}{
++		{"teardown", func(e *Endpoint) { e.Teardown() }},
++		{"close", func(e *Endpoint) { _ = e.Close() }},
++	} {
++		t.Run(release.name, func(t *testing.T) {
++			for i := 0; i < 3; i++ {
++				e, _, _ := newQuiesceTestEndpoint(t)
++				start := make(chan struct{})
++				var wg sync.WaitGroup
++				readers := []func(){
++					func() { _ = e.BindUpdate() },
++					func() { _ = e.Lookup(packetDestinationLx) },
++					func() { _ = e.WritePackets([][]byte{append([]byte(nil), packet...)}) },
++				}
++				wg.Add(len(readers) + 1)
++				for _, reader := range readers {
++					go func() {
++						defer wg.Done()
++						<-start
++						// Keep reading through the release: a read is only
++						// unordered with the store when it runs after the
++						// writer's last lock on the device.
++						for deadline := time.Now().Add(100 * time.Millisecond); time.Now().Before(deadline); {
++							reader()
++						}
++					}()
++				}
++				go func() {
++					defer wg.Done()
++					<-start
++					release.fn(e)
++				}()
++				close(start)
++				waitGroupLx(t, &wg)
++			}
++		})
++	}
++}
++
++func TestReturnPathSurvivesConcurrentRebuild(t *testing.T) {
++	defer SetNewDeviceFnForTest(func(options DeviceOptions) (Device, error) {
++		return newFakeDevice(), nil
++	})()
++	for i := 0; i < 50; i++ {
++		e := newLazyTransportEndpoint(t, false, "10.0.0.2/32")
++		start := make(chan struct{})
++		var wg sync.WaitGroup
++		wg.Add(2)
++		go func() {
++			defer wg.Done()
++			<-start
++			if err := e.AttachReturn(fakeReturn{}); err != nil {
++				t.Error(err)
++			}
++		}()
++		go func() {
++			defer wg.Done()
++			<-start
++			if err := e.Rebuild(); err != nil {
++				t.Error(err)
++			}
++		}()
++		close(start)
++		wg.Wait()
++		if e.returnDevice.state.Load() == nil {
++			t.Fatalf("iteration %d: the return path attached during Rebuild was lost", i)
++		}
++		_ = e.Close()
++	}
++}
++
++var packetDestinationLx = netip.MustParseAddr("10.0.0.9")
++
++// ipv4PacketLx builds a minimal IPv4 header (no payload) from source to
++// destination; enough for the device's peer lookup and staging.
++func ipv4PacketLx(source, destination string) []byte {
++	packet := make([]byte, 20)
++	packet[0] = 0x45
++	packet[3] = 20
++	packet[8] = 64
++	packet[9] = 17
++	src := netip.MustParseAddr(source).As4()
++	dst := netip.MustParseAddr(destination).As4()
++	copy(packet[12:16], src[:])
++	copy(packet[16:20], dst[:])
++	return packet
++}
++
++func waitGroupLx(t *testing.T, wg *sync.WaitGroup) {
++	t.Helper()
++	done := make(chan struct{})
++	go func() {
++		wg.Wait()
++		close(done)
++	}()
++	select {
++	case <-done:
++	case <-time.After(10 * time.Second):
++		t.Fatal("readers or the release did not return")
++	}
++}

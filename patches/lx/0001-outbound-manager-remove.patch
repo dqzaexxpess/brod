@@ -1,0 +1,66 @@
+diff --git a/adapter/outbound.go b/adapter/outbound.go
+index d8783cb..9f630b8 100644
+--- a/adapter/outbound.go
++++ b/adapter/outbound.go
+@@ -48,6 +48,11 @@ type OutboundManager interface {
+ 	Outbound(tag string) (Outbound, bool)
+ 	Default() Outbound
+ 	Create(ctx context.Context, router Router, logger log.ContextLogger, tag string, outboundType string, options any) error
++	// lx:begin remove
++	// Remove удаляет outbound и закрывает его. Отказ: тега нет, это outbound по умолчанию или от него зависят другие outbound'ы.
++	// Правила маршрута, ссылающиеся на тег, остаются на совести вызывающего.
++	Remove(tag string) error
++	// lx:end remove
+ }
+ 
+ type IdleConnectionKeeper interface {
+diff --git a/adapter/outbound/manager.go b/adapter/outbound/manager.go
+index da59560..357a5cf 100644
+--- a/adapter/outbound/manager.go
++++ b/adapter/outbound/manager.go
+@@ -207,3 +207,45 @@ func (m *Manager) Create(ctx context.Context, router adapter.Router, logger log.
+ 	}
+ 	return nil
+ }
++
++// lx:begin remove
++
++// Remove удаляет outbound, ранее добавленный Create (или описанный в конфиге), и закрывает его.
++// Нельзя удалить: outbound по умолчанию; outbound, от которого зависят другие (detour, члены групп).
++func (m *Manager) Remove(tag string) error {
++	m.access.Lock()
++	outbound, found := m.outboundByTag[tag]
++	if !found {
++		m.access.Unlock()
++		return os.ErrNotExist
++	}
++	if outbound == m.defaultOutbound {
++		m.access.Unlock()
++		return E.New("cannot remove default outbound: ", tag)
++	}
++	for _, other := range m.outbounds {
++		if other == outbound {
++			continue
++		}
++		for _, dependency := range other.Dependencies() {
++			if dependency == tag {
++				m.access.Unlock()
++				return E.New("cannot remove outbound ", tag, ": used by ", other.Tag())
++			}
++		}
++	}
++	// новый срез, а не правка на месте: Outbounds() отдаёт m.outbounds вызывающим, которые могут итерировать его параллельно
++	remaining := make([]adapter.Outbound, 0, len(m.outbounds))
++	for _, o := range m.outbounds {
++		if o != outbound {
++			remaining = append(remaining, o)
++		}
++	}
++	m.outbounds = remaining
++	delete(m.outboundByTag, tag)
++	delete(m.optionsByTag, tag)
++	m.access.Unlock()
++	return common.Close(outbound)
++}
++
++// lx:end remove

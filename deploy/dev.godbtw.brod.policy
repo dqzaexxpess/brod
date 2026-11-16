@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<!--
+  Действие для помощника от root brod-helper. Ставится в /usr/share/polkit-1/actions/
+  скриптом deploy/install-helper.sh. Без пароля только в активной локальной сессии: помощник принимает
+  лишь выпуски, подписанные ключом релизов, и ставит только brodd в /usr/local/lib/brod.
+-->
+<policyconfig>
+  <vendor>Brod</vendor>
+  <action id="dev.godbtw.brod.install">
+    <description>Install the Brod daemon from a signed release</description>
+    <description xml:lang="ru">Установка демона Brod из подписанного выпуска</description>
+    <message>Authentication is required to install the Brod daemon</message>
+    <message xml:lang="ru">Для установки демона Brod требуется подтверждение</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/local/libexec/brod/brod-helper</annotate>
+  </action>
+</policyconfig>

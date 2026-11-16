@@ -1,0 +1,2 @@
+# Патчи движка накладываются git apply побайтно: перевод строк при checkout (core.autocrlf=true на Windows) их ломает.
+*.patch -text

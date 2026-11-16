@@ -1,0 +1,8 @@
+work/
+bin/
+*.log
+/brodd
+/brodctl
+/brodd.exe
+/brodctl.exe
+dist/

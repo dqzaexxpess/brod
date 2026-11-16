@@ -1,0 +1,52 @@
+diff --git a/submodules/sing-tun/internal/winsys/constants.go b/submodules/sing-tun/internal/winsys/constants.go
+index 03e6e65..891dd7e 100644
+--- a/submodules/sing-tun/internal/winsys/constants.go
++++ b/submodules/sing-tun/internal/winsys/constants.go
+@@ -143,6 +143,15 @@ var FWPM_LAYER_ALE_AUTH_CONNECT_V6 = windows.GUID{
+ 	Data4: [8]byte{0x84, 0xc3, 0xba, 0x54, 0xdc, 0xb3, 0xb6, 0xb4},
+ }
+ 
++var FWPM_CONDITION_FLAGS = windows.GUID{
++	Data1: 0x632ce23b,
++	Data2: 0x5167,
++	Data3: 0x435c,
++	Data4: [8]byte{0x86, 0xd7, 0xe9, 0x03, 0x68, 0x4a, 0xa8, 0x0c},
++}
++
++const FWP_CONDITION_FLAG_IS_LOOPBACK uint32 = 0x00000001
++
+ var FWPM_CONDITION_ALE_APP_ID = windows.GUID{
+ 	Data1: 0xd78e1e87,
+ 	Data2: 0x8644,
+diff --git a/submodules/sing-tun/tun_windows.go b/submodules/sing-tun/tun_windows.go
+index 726fb8a..72a1c83 100644
+--- a/submodules/sing-tun/tun_windows.go
++++ b/submodules/sing-tun/tun_windows.go
+@@ -339,6 +339,27 @@ func (t *NativeTun) Start() error {
+ 				}
+ 			}
+ 
++			// lx: the block below would also cover loopback ([::1]): local services bound to
++			// "localhost" became unreachable (WSAEACCES) while the tunnel was up.
++			loopbackCondition := make([]winsys.FWPM_FILTER_CONDITION0, 1)
++			loopbackCondition[0].FieldKey = winsys.FWPM_CONDITION_FLAGS
++			loopbackCondition[0].MatchType = winsys.FWP_MATCH_FLAGS_ALL_SET
++			loopbackCondition[0].ConditionValue.Type = winsys.FWP_UINT32
++			loopbackCondition[0].ConditionValue.Value = uintptr(winsys.FWP_CONDITION_FLAG_IS_LOOPBACK)
++			loopbackFilter := winsys.FWPM_FILTER0{}
++			loopbackFilter.FilterCondition = &loopbackCondition[0]
++			loopbackFilter.NumFilterConditions = 1
++			loopbackFilter.DisplayData = winsys.CreateDisplayData(TunnelType, "allow ipv6 loopback")
++			loopbackFilter.SubLayerKey = subLayerKey
++			loopbackFilter.LayerKey = winsys.FWPM_LAYER_ALE_AUTH_CONNECT_V6
++			loopbackFilter.Action.Type = winsys.FWP_ACTION_PERMIT
++			loopbackFilter.Weight.Type = winsys.FWP_UINT8
++			loopbackFilter.Weight.Value = uintptr(13)
++			err = winsys.FwpmFilterAdd0(engine, &loopbackFilter, 0, &filterId)
++			if err != nil {
++				return os.NewSyscallError("FwpmFilterAdd0", err)
++			}
++
+ 			blockFilter := winsys.FWPM_FILTER0{}
+ 			blockFilter.DisplayData = winsys.CreateDisplayData(TunnelType, "block ipv6")
+ 			blockFilter.SubLayerKey = subLayerKey

@@ -1,0 +1,244 @@
+diff --git a/submodules/wireguard-go/device/lx_demand_attempts_test.go b/submodules/wireguard-go/device/lx_demand_attempts_test.go
+new file mode 100644
+index 0000000..4ddf5dd
+--- /dev/null
++++ b/submodules/wireguard-go/device/lx_demand_attempts_test.go
+@@ -0,0 +1,111 @@
++/* SPDX-License-Identifier: MIT
++ *
++ * lx: SPEC 041 — traffic demand must not reset the handshake attempt counter
++ * while a handshake is pending. Field failure (Windows, WARP endpoint behind a
++ * dead 5-tuple after a core restart): every packet staged during the pending
++ * handshake called SendHandshakeInitiation(false), which zeroed the counter
++ * before the rate limit returned without sending. Under steady traffic the
++ * retry log read "try 2" forever, the early self-heal rebind (>=3 unanswered
++ * attempts) never fired, and the endpoint stayed dead for minutes; it healed
++ * at once when traffic paused and the counter could climb.
++ */
++
++package device
++
++import (
++	"testing"
++	"time"
++)
++
++// TestDemandDoesNotResetPendingAttempts: a packet staged while the handshake
++// is pending keeps the attempt count, so the next retry expiry is the 3rd and
++// triggers the early rebind that brings the tunnel up.
++func TestDemandDoesNotResetPendingAttempts(t *testing.T) {
++	pair := newGiveUpPair(t, true)
++
++	pkt := buildIPv4Packet(testIPA, testIPB, 8)
++	send := func() { pair.tunA.toDevice <- pkt }
++
++	send() // first (blackholed) initiation
++
++	pair.devA.peers.RLock()
++	peer := pair.devA.peers.keyMap[pair.pkB]
++	pair.devA.peers.RUnlock()
++	if peer == nil {
++		t.Fatal("peer not found")
++	}
++
++	// Two retries already counted, the last initiation just sent.
++	peer.handshake.mutex.Lock()
++	peer.handshake.lastSentHandshake = time.Now()
++	peer.handshake.mutex.Unlock()
++	peer.timers.handshakeAttempts.Store(2)
++
++	// New demand while the handshake is pending: rate-limited, nothing is sent,
++	// and the counter must stay where it is.
++	if err := peer.SendHandshakeInitiation(false); err != nil {
++		t.Fatal(err)
++	}
++	if got := peer.timers.handshakeAttempts.Load(); got != 2 {
++		t.Fatalf("handshakeAttempts = %d after rate-limited demand, want 2", got)
++	}
++
++	// The next retry expiry is the 3rd: the early self-heal rebinds and the
++	// tunnel comes up.
++	peer.handshake.mutex.Lock()
++	peer.handshake.lastSentHandshake = time.Now().Add(-2 * RekeyTimeout)
++	peer.handshake.mutex.Unlock()
++	expiredRetransmitHandshake(peer)
++
++	awaitPacket(t, pair.tunB, pkt, send)
++}
++
++// TestDemandLeavesPendingCycleToRetryTimer: once RekeyTimeout has passed but
++// the retry timer (jittered) has not fired yet, demand must not send a fresh
++// initiation that resets the counter and pushes the timer forward — under
++// steady traffic that kept the retry timer from ever expiring.
++func TestDemandLeavesPendingCycleToRetryTimer(t *testing.T) {
++	pair := newGiveUpPair(t, true)
++
++	pkt := buildIPv4Packet(testIPA, testIPB, 8)
++	send := func() { pair.tunA.toDevice <- pkt }
++
++	send() // first (blackholed) initiation; arms the retry timer
++
++	pair.devA.peers.RLock()
++	peer := pair.devA.peers.keyMap[pair.pkB]
++	pair.devA.peers.RUnlock()
++	if peer == nil {
++		t.Fatal("peer not found")
++	}
++	for deadline := time.Now().Add(2 * time.Second); !peer.timers.retransmitHandshake.IsPending(); {
++		if time.Now().After(deadline) {
++			t.Fatal("retry timer not armed after the first initiation")
++		}
++		time.Sleep(5 * time.Millisecond)
++	}
++
++	// Two retries counted, RekeyTimeout already passed, retry timer still armed.
++	sent := time.Now().Add(-2 * RekeyTimeout)
++	peer.handshake.mutex.Lock()
++	peer.handshake.lastSentHandshake = sent
++	peer.handshake.mutex.Unlock()
++	peer.timers.handshakeAttempts.Store(2)
++
++	if err := peer.SendHandshakeInitiation(false); err != nil {
++		t.Fatal(err)
++	}
++	peer.handshake.mutex.RLock()
++	last := peer.handshake.lastSentHandshake
++	peer.handshake.mutex.RUnlock()
++	if !last.Equal(sent) {
++		t.Fatal("demand sent a fresh initiation during a pending cycle")
++	}
++	if got := peer.timers.handshakeAttempts.Load(); got != 2 {
++		t.Fatalf("handshakeAttempts = %d after demand during a pending cycle, want 2", got)
++	}
++
++	// The retry timer's 3rd expiry triggers the early rebind.
++	expiredRetransmitHandshake(peer)
++	awaitPacket(t, pair.tunB, pkt, send)
++}
+diff --git a/submodules/wireguard-go/device/lx_giveup_rebind.go b/submodules/wireguard-go/device/lx_giveup_rebind.go
+index d18c5cf..2eb8ac7 100644
+--- a/submodules/wireguard-go/device/lx_giveup_rebind.go
++++ b/submodules/wireguard-go/device/lx_giveup_rebind.go
+@@ -164,10 +164,22 @@ func (device *Device) selfHealRebind(trigger string, peers ...*Peer) bool {
+ 			// SendBuffers and left on the new socket: it stands, and a second
+ 			// one on its heels would only be dropped as a replay.
+ 			peer.handshake.mutex.Lock()
+-			if peer.handshake.lastSentHandshake.Before(started) {
++			voided := peer.handshake.lastSentHandshake.Before(started)
++			if voided {
+ 				peer.handshake.lastSentHandshake = time.Now().Add(-(device.rekeyMinTimeout() + time.Second))
+ 			}
+ 			peer.handshake.mutex.Unlock()
++			if voided {
++				// The voided initiation armed the retransmit timer, and
++				// SendHandshakeInitiation(false) leaves a pending cycle to
++				// that timer (the demand guard in send.go), which would
++				// swallow this re-initiation (nudge: the cycle is pending
++				// while the wake-up lands). The cycle belonged to the closed
++				// socket: end it, the initiation below starts a new one and
++				// re-arms the timer. Not done for an initiation stamped after
++				// the rebind began: it stands, with its timer.
++				peer.timers.retransmitHandshake.Del()
++			}
+ 			peer.SendHandshakeInitiation(false)
+ 		}
+ 	}()
+diff --git a/submodules/wireguard-go/device/lx_nudge_pending_test.go b/submodules/wireguard-go/device/lx_nudge_pending_test.go
+new file mode 100644
+index 0000000..a5d63a0
+--- /dev/null
++++ b/submodules/wireguard-go/device/lx_nudge_pending_test.go
+@@ -0,0 +1,51 @@
++/* SPDX-License-Identifier: MIT
++ *
++ * lx: the pending-cycle guard in SendHandshakeInitiation (demand leaves a
++ * pending handshake cycle to the retry timer) must not swallow the
++ * re-initiation that follows a self-heal rebind.
++ */
++
++package device
++
++import (
++	"testing"
++	"time"
++)
++
++// TestNudgeReinitiatesDuringPendingCycle: the wake nudge lands while a
++// handshake cycle is pending (the retry timer was armed by the initiation that
++// just left on the soon-to-be-closed socket). After the rebind a new
++// initiation goes out at once, with no further traffic (the tunnel may then
++// complete and drop the timer, so only the initiation is asserted).
++func TestNudgeReinitiatesDuringPendingCycle(t *testing.T) {
++	pair := newGiveUpPair(t, true)
++
++	pair.tunA.toDevice <- buildIPv4Packet(testIPA, testIPB, 8)
++	peer := peerOf(t, pair.devA, pair.pkB)
++	awaitInitiationSent(t, peer)
++	if !peer.timers.retransmitHandshake.IsPending() {
++		t.Fatal("retry timer not armed after the first initiation")
++	}
++	peer.handshake.mutex.RLock()
++	before := peer.handshake.lastSentHandshake
++	peer.handshake.mutex.RUnlock()
++
++	if !pair.devA.RebindIfSessionStale() {
++		t.Fatal("nudge on a cold session must rebind")
++	}
++	waitOpens(t, pair.bindA, 2)
++
++	deadline := time.Now().Add(2 * time.Second)
++	for {
++		peer.handshake.mutex.RLock()
++		after := peer.handshake.lastSentHandshake
++		peer.handshake.mutex.RUnlock()
++		if after.After(before) {
++			return
++		}
++		if time.Now().After(deadline) {
++			t.Fatal("no re-initiation after the nudge rebind: swallowed by the pending-cycle guard")
++		}
++		time.Sleep(5 * time.Millisecond)
++	}
++}
+diff --git a/submodules/wireguard-go/device/send.go b/submodules/wireguard-go/device/send.go
+index 9096e86..1f0e6f3 100644
+--- a/submodules/wireguard-go/device/send.go
++++ b/submodules/wireguard-go/device/send.go
+@@ -196,9 +196,15 @@ func (peer *Peer) SendPriorityMessage() {
+ }
+ 
+ func (peer *Peer) SendHandshakeInitiation(isRetry bool) error {
+-	if !isRetry {
+-		peer.timers.handshakeAttempts.Store(0)
+-		peer.timers.maxHandshakeAttempts.Store(peer.device.maxHandshakeAttempts())
++	// lx: a handshake cycle is already in progress (the retransmit timer is
++	// armed until a response arrives or the cycle gives up): traffic demand
++	// leaves it to the retry timer. Upstream let demand send a fresh initiation
++	// as soon as RekeyTimeout passed, which always beat the jittered retry timer
++	// under steady traffic: the timer was pushed forward on every send, never
++	// expired, the attempt counter never grew, and the SPEC 041 early/give-up
++	// self-heal never fired on a dead 5-tuple.
++	if !isRetry && peer.timers.retransmitHandshake != nil && peer.timers.retransmitHandshake.IsPending() {
++		return nil
+ 	}
+ 
+ 	timeout := peer.device.rekeyMinTimeout()
+@@ -218,6 +224,18 @@ func (peer *Peer) SendHandshakeInitiation(isRetry bool) error {
+ 	peer.handshake.lastSentHandshake = time.Now()
+ 	peer.handshake.mutex.Unlock()
+ 
++	// lx: the attempt counter restarts only when a fresh (non-retry) initiation
++	// is actually sent. Upstream reset it before the rate limit above, so every
++	// packet staged while a handshake was pending zeroed it without sending
++	// anything: under steady traffic over a dead 5-tuple the retry cycle never
++	// reached earlyGiveUpMinAttempts (or the give-up), and the SPEC 041
++	// self-heal rebind never fired — the peer stayed dead for as long as the
++	// traffic lasted.
++	if !isRetry {
++		peer.timers.handshakeAttempts.Store(0)
++		peer.timers.maxHandshakeAttempts.Store(peer.device.maxHandshakeAttempts())
++	}
++
+ 	peer.device.log.Verbosef("%v - Sending handshake initiation", peer)
+ 
+ 	candidates := peer.resolveEndpoints()
