@@ -9,10 +9,11 @@ files=("$@")
 ps=$(command -v pwsh || command -v powershell || true)
 if [ -n "$ps" ]; then
   for f in "${files[@]}"; do
-    "$ps" -NoProfile -Command '
-      $e = $null; $t = $null
-      [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $args[0]).Path, [ref]$t, [ref]$e)
-      if ($e -and $e.Count) { $e | ForEach-Object { "$($args[0]):$($_.Extent.StartLineNumber): $($_.Message)" | Write-Error }; exit 1 }' "$f"
+    # путь передаётся переменной окружения: аргумент после -Command дописывался бы к тексту команды, и скрипт не разбирался, а запускался
+    PS1_FILE="$f" "$ps" -NoProfile -Command '
+      $p = $env:PS1_FILE; $e = $null; $t = $null
+      [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $p).Path, [ref]$t, [ref]$e)
+      if ($e -and $e.Count) { $e | ForEach-Object { "${p}:$($_.Extent.StartLineNumber): $($_.Message)" | Write-Error }; exit 1 }'
     echo "ps1 разобран: $f"
   done
 else
