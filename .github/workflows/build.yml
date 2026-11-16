@@ -261,6 +261,26 @@ jobs:
           powershell -NoProfile -Command "Compress-Archive -Path dist/brod/* -DestinationPath dist/brod-$VER-windows-amd64.zip -Force"
           echo "brod-$VER-windows-amd64.zip sha256 $(sha256sum dist/brod-$VER-windows-amd64.zip | cut -d' ' -f1)"
 
+      # установщик Inno Setup: обёртка над install.ps1 (мастер с выбором пользователя, служба, удаление)
+      - name: Установщик (Inno Setup)
+        shell: pwsh
+        run: |
+          $ver = (Select-String -Path buildinfo/buildinfo.go -Pattern '^const Version = "(.*)"$').Matches[0].Groups[1].Value
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup --no-progress -y
+            if ($LASTEXITCODE -ne 0) { throw "не удалось поставить Inno Setup" }
+          }
+          & $iscc "/DAppVersion=$ver" "/DSourceDir=$PWD\dist\brod" "/O$PWD\dist" deploy\windows\brod.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC завершился с кодом $LASTEXITCODE" }
+          Get-FileHash dist\brod-$ver-windows-amd64-setup.exe -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  $(Split-Path $_.Path -Leaf)" }
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: brod-windows-setup
+          path: dist/brod-*-windows-amd64-setup.exe
+          if-no-files-found: error
+
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: brod-windows
