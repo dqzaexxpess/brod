@@ -8,22 +8,22 @@ VPN-клиент для Linux, Windows и Android на движке [sing-box-lx
 
 
 <p align="center">
-  <img src="screenshots/android-home.png" width="270" alt="Главная">
-  <img src="screenshots/android-nodes.png" width="270" alt="Узлы">
-  <img src="screenshots/android-proxies.png" width="270" alt="Прокси для Telegram">
+  <img src="screenshots/android-home-v2.png" width="270" alt="Главная">
+  <img src="screenshots/android-nodes-v2.png" width="270" alt="Узлы">
+  <img src="screenshots/android-proxies-v2.png" width="270" alt="Прокси для Telegram">
 </p>
 <p align="center">
-  <img src="screenshots/android-monitor.png" width="270" alt="Монитор">
-  <img src="screenshots/android-settings.png" width="270" alt="Настройки">
-  <img src="screenshots/android-sources.png" width="270" alt="Источники подписок">
+  <img src="screenshots/android-monitor-v2.png" width="270" alt="Монитор">
+  <img src="screenshots/android-settings-v2.png" width="270" alt="Настройки">
+  <img src="screenshots/android-sources-v2.png" width="270" alt="Источники подписок">
 </p>
 <p align="center">
-  <img src="screenshots/android-candidates.png" width="270" alt="Найденные источники">
-  <img src="screenshots/android-warp.png" width="270" alt="Cloudflare WARP">
-  <img src="screenshots/android-templates.png" width="270" alt="Шаблоны правил">
+  <img src="screenshots/android-candidates-v2.png" width="270" alt="Найденные источники">
+  <img src="screenshots/android-warp-v2.png" width="270" alt="Cloudflare WARP">
+  <img src="screenshots/android-templates-v2.png" width="270" alt="Шаблоны правил">
 </p>
 <p align="center">
-  <img src="screenshots/linux-home.png" width="330" alt="Brod на Linux">
+  <img src="screenshots/linux-home-v2.png" width="330" alt="Brod на Linux">
 </p>
 <p align="center"><sub>Android и Linux (адреса серверов на снимках размыты). Приложение на Windows выглядит так же.</sub></p>
 
