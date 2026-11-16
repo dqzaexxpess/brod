@@ -61,7 +61,7 @@ func setup(t *testing.T) (*core.Core, *fakeSender, *notify.Presenter) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { c.Close() })
-	// прежние сценарии проверяют уровень «all» (все уведомления, критичные и «липкие»); новый уровень — в TestImportantLevel
+	// сценарии ниже проверяют уровень «all» (все уведомления, критичные и «липкие»); новый уровень — в TestImportantLevel
 	if err := c.SetSetting(core.SetNotifyLevel, "all", "user"); err != nil {
 		t.Fatal(err)
 	}

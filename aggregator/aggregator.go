@@ -147,9 +147,8 @@ func Defaults() []Source {
 		{Name: "kort0881/vless", URL: raw + "kort0881/vpn-vless-configs-russia/main/output/vless.txt", Mirror: cdn + "kort0881/vpn-vless-configs-russia@main/output/vless.txt", Priority: 1},
 		// только прокси Telegram (MTProto), не узлы: вкладка «Прокси»; обновляется раз в 12 часов
 		{Name: "SoliSpirit/mtproto", URL: raw + "SoliSpirit/mtproto/master/all_proxies.txt", Mirror: cdn + "SoliSpirit/mtproto@master/all_proxies.txt", Priority: 5},
-		// публичные каналы Telegram через веб-просмотр t.me/s/<канал> (последние ~20 сообщений, прокси меняются раз в час): выбраны замером из сети
-		// владельца (живых из напрямую проверенных — mtp4tg 9 из 22, ProxyMTProto 4 из 48, TProxyRU 1 из 46); каналы-воронки VPN и
-		// повторяющие один прокси (ProxyFree_Ru, tgmtproxylol, memtproxy, telega_proxies) не взяты
+		// публичные каналы Telegram через веб-просмотр t.me/s/<канал> (последние ~20 сообщений, прокси меняются раз в час): выбраны по доле живых прокси;
+		// каналы-воронки VPN и повторяющие один прокси (ProxyFree_Ru, tgmtproxylol, memtproxy, telega_proxies) не взяты
 		{Name: "t.me/mtp4tg", URL: "https://t.me/s/mtp4tg", Priority: 5},
 		{Name: "t.me/ProxyMTProto", URL: "https://t.me/s/ProxyMTProto", Priority: 5},
 		{Name: "t.me/TProxyRU", URL: "https://t.me/s/TProxyRU", Priority: 5},

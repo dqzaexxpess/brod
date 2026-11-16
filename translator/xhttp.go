@@ -40,7 +40,7 @@ var xmuxKeys = map[string]string{
 
 // Верхние границы чисел. Движок не ограничивает их сам: x_padding_bytes даёт strings.Repeat("X", n) на каждый запрос,
 // session_length — make([]byte, n) на каждый сеанс, sc_max_each_post_bytes — предел буфера выгрузки, xmux — число соединений.
-// Границы взяты с запасом над реальными максимумами из рабочей базы (164 тыс. узлов): x_padding_bytes 4000, sc_max_each_post_bytes 20 000 000,
+// Границы взяты с запасом над реальными максимумами из публичных агрегатов: x_padding_bytes 4000, sc_max_each_post_bytes 20 000 000,
 // uplink_chunk_size 614 400, session_length 32, max_concurrency 100, max_connections 16, c_max_reuse_times 2000, h_max_request_times 10 000,
 // h_max_reusable_secs 86 400, h_keep_alive_period 600, sc_min_posts_interval_ms 200. Выше предела ссылка отклоняется целиком.
 const (

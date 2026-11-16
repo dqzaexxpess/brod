@@ -2,7 +2,7 @@
 # удаление помощника brod-helper и политики polkit (поставлены deploy/install-helper.sh). ЗАПУСКАТЬ ВАМ:
 #
 #   sudo deploy/uninstall-helper.sh           помощник и политика; демон в /usr/local/lib/brod остаётся (приложение продолжает работать,
-#                                             следующее обновление пойдёт прежним способом — переходный режим)
+#                                             следующее обновление пойдёт без помощника — переходный режим)
 #   sudo deploy/uninstall-helper.sh --purge   + каталог /usr/local/lib/brod с демоном; после этого: deploy/install-linux.sh (вернёт brodd
 #                                             в ~/.local/opt/brod), иначе приложение не найдёт демон
 set -euo pipefail

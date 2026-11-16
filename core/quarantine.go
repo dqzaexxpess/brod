@@ -73,7 +73,7 @@ func nodeFromLink(l string) (store.NodeRec, bool) {
 
 // quarantineOrder: кого проверять первым — тех, у кого выборка самая давняя (ни разу не бравшуюся — раньше всех). Потолок времени этапа
 // покрывает лишь часть кандидатов (мёртвые узлы — до 10 с на каждый), и при порядке «по числу ссылок» одни и те же крупные кандидаты
-// съедали бы потолок каждый день, а остальные никогда не получили бы статистики. Среди равных порядок прежний (по убыванию ссылок).
+// съедали бы потолок каждый день, а остальные никогда не получили бы статистики. Среди равных порядок по убыванию ссылок.
 func quarantineOrder(found []discover.Found, have map[string]store.CandidateRec) []discover.Found {
 	out := append([]discover.Found(nil), found...)
 	sort.SliceStable(out, func(i, j int) bool { return have[out[i].URL].LastSample.Before(have[out[j].URL].LastSample) })

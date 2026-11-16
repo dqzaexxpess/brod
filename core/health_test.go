@@ -103,7 +103,7 @@ func TestProbeActiveQuickDoesNotAffectHealth(t *testing.T) {
 	if r, err := c.ProbeActiveQuick(ctx); err != nil || !r.OK || quickCalls.Load() != 6 {
 		t.Fatalf("успех быстрой проверки: %+v %v вызовов %d", r, err, quickCalls.Load())
 	}
-	// деградация по полной проверке по-прежнему считается как раньше
+	// деградация по полной проверке считается обычным образом
 	_, _ = c.ProbeActive(ctx)
 	_, _ = c.ProbeActive(ctx)
 	if !c.Degraded() {
@@ -270,7 +270,7 @@ func TestAlternativesVerifiedLiveAndOrdered(t *testing.T) {
 			t.Fatalf("в альтернативах недопустимый узел: %+v", a.Node)
 		}
 	}
-	// живая проверка записалась: dead теперь с провалом в этой сети
+	// живая проверка записалась: у dead есть провал в этой сети
 	if h, _ := c.st.Histories("net1", time.Now()); h[ids["dead"]].LastFail.IsZero() {
 		t.Fatal("провал живой проверки кандидата не записан")
 	}

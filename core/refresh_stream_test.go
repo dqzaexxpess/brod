@@ -127,7 +127,7 @@ func TestRefreshLazyFetchEndToEnd(t *testing.T) {
 	if recs[0].Title != "Тест" || recs[0].LastCount != 56 {
 		t.Fatalf("сведения источника: %+v", recs[0])
 	}
-	rep, err = c.Refresh(context.Background(), "user") // теперь Known: 304 без чтения тела
+	rep, err = c.Refresh(context.Background(), "user") // Known: 304 без чтения тела
 	if err != nil {
 		t.Fatal(err)
 	}

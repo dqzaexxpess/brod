@@ -1,4 +1,4 @@
-// T-9: win_notices.dart, остаток: устойчивый разбор ответов демона. WinNotices вне Windows не создаётся: конструктор открывает DLL плагина.
+// win_notices.dart: устойчивый разбор ответов демона. WinNotices вне Windows не создаётся: конструктор открывает DLL плагина.
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';

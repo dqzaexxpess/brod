@@ -44,7 +44,7 @@ func TestIsMobileNet(t *testing.T) {
 	}
 }
 
-// В мобильной сети узел с адресом из белого списка попадает в верх очереди проверок, в обычной сети порядок прежний.
+// В мобильной сети узел с адресом из белого списка попадает в верх очереди проверок, в обычной сети порядок обычный.
 func TestPickCandidatesBoostsWhitelistedIPOnMobile(t *testing.T) {
 	c := newCore(t, t.TempDir())
 	defer c.Close()

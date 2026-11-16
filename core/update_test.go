@@ -319,7 +319,7 @@ func TestCheckUpdateNoManifestIsNotAnError(t *testing.T) {
 	}
 }
 
-// update.url: манифест и файл с локального http-сервера. Подпись по-прежнему обязательна, а http допускается только на адрес этой машины.
+// update.url: манифест и файл с локального http-сервера. Подпись обязательна, а http допускается только на адрес этой машины.
 func TestUpdateURLLoopbackHTTP(t *testing.T) {
 	data := []byte("apk-bytes-0.4.0")
 	pub, priv, _ := ed25519.GenerateKey(rand.Reader)

@@ -179,7 +179,7 @@ class MainActivity : FlutterActivity() {
             "shareLogs" -> background(result, "logs") {
                 val dir = File(filesDir, "brod")
                 val shareDir = File(cacheDir, "share").apply { mkdirs() }
-                // прежние выгрузки не копим: в кэше остаётся не больше одной очищенной выгрузки
+                // старые выгрузки не копим: в кэше остаётся не больше одной очищенной выгрузки
                 shareDir.listFiles { f -> f.name.startsWith("brod-log") }?.forEach { it.delete() }
                 val out = shareDir.resolve("brod-log-${System.currentTimeMillis()}.txt")
                 out.outputStream().use { o ->

@@ -193,7 +193,7 @@ func TestDismissedAndAddedNotOffered(t *testing.T) {
 	if got == nil || !got.UserAdded || !got.Enabled || got.URL != live.URL {
 		t.Fatalf("источник из кандидата: %+v", got)
 	}
-	// узлы кандидата по-прежнему не в базе до обновления
+	// узлы кандидата не в базе до обновления
 	if total, _, _ := c.st.CountNodes(); total != 0 {
 		t.Errorf("узлы в базе: %d", total)
 	}

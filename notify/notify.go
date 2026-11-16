@@ -138,7 +138,7 @@ func (p *Presenter) quiet(e store.Event) bool {
 	return lvl == "important" && !p.VPNOn()
 }
 
-// loud — уровень «all»: прежнее поведение с «липкими» критичными уведомлениями. Иначе уведомления короткие и обычной срочности.
+// loud — уровень «all»: «липкие» критичные уведомления. Иначе уведомления короткие и обычной срочности.
 func (p *Presenter) loud() bool { return p.c.NotifyLevel() == "all" }
 
 func (p *Presenter) urgency() Urgency {

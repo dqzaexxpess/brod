@@ -3,7 +3,7 @@
 #   scripts/build-android-local.sh setup   — один раз: Android SDK/NDK, gomobile, зеркало Maven для Gradle
 #   scripts/build-android-local.sh build   — ядро и APK → app/build/app/outputs/flutter-apk/app-release.apk
 #   scripts/build-android-local.sh aar     — только ядро;  apk — только приложение (ядро уже собрано)
-# Зачем: dl.google.com и Google Maven недоступны из некоторых сетей (404), а CI доступен не всегда. Источники, одобренные владельцем 2026-11-10:
+# Зачем: dl.google.com и Google Maven недоступны из некоторых сетей (404), а CI доступен не всегда. Допустимые источники:
 #   Android SDK/NDK — зеркало mirrors.cloud.tencent.com/AndroidSDK (SHA-256 из официального dl.google.com, сверены 2026-11-15, зеркало их не удостоверяет);
 #   Google Maven — maven.aliyun.com/repository/google (только для этой сборки: отдельный GRADLE_USER_HOME); Flutter — flutter-io.cn (scripts/flutterw.sh).
 # Это сторонние зеркала: код плагина Gradle исполняется при сборке, а APK подписывается постоянным ключом. Нужен JDK 17 с javac.

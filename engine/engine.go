@@ -107,8 +107,8 @@ func (e *Engine) AppendTracker(t adapter.ConnectionTracker) { e.box.Router().App
 func (e *Engine) Direct() adapter.Outbound { return e.box.Outbound().Default() }
 
 // OutboundFlags — что белый список узла разрешает сверх параметров самого узла: тег и цепочку через WARP (detour) ставит ядро
-// (core.outboundJSON), одинаково для боевых узлов (Add) и пробных (NewProbe). Раньше у NewProbe не было Detour, и при check.via_warp
-// отклонялась каждая проверка узла.
+// (core.outboundJSON), одинаково для боевых узлов (Add) и пробных (NewProbe): без Detour у пробы при check.via_warp
+// отклонялась бы каждая проверка узла.
 var OutboundFlags = nodeopts.Flags{Tag: true, Detour: true}
 
 // Probe — временный outbound для проверки узла. Не регистрируется в менеджере.

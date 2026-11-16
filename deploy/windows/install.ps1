@@ -29,9 +29,9 @@ function Write-Result($ok, $err) {
     [IO.File]::WriteAllText($tmp, ($r | ConvertTo-Json -Compress), (New-Object Text.UTF8Encoding($false)))
     Move-Item -Force -Path $tmp -Destination $Result
 }
-# Установка прерывается посреди дела (файлы уже скопированы, прежнее остановлено): без этого пользователь остался бы без демона и без объяснения.
+# Установка прерывается посреди дела (файлы уже скопированы, прежнее остановлено): откат нужен, чтобы пользователь не остался без демона и без объяснения.
 # Каждый шаг отката — в своём try: ошибка копирования (файл занят) при $ErrorActionPreference = 'Stop' прерывает обработчик несмотря на
-# -ErrorAction SilentlyContinue, и тогда служба оставалась остановленной, а итог не записывался (проверено на Windows 11).
+# -ErrorAction SilentlyContinue: служба осталась бы остановленной, а итог не записался бы.
 trap {
     $msg = $_.Exception.Message
     if ($Update -and (Test-Path "$Dir.prev")) { # вернуть прежние файлы поверх недокопированных; занятый файл — повтор через 2 с

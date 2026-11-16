@@ -73,7 +73,7 @@ func hasSet(r map[string]any, name string) bool {
 	return false
 }
 
-// Без TUN в конфиге нет ни TUN-входа, ни DNS-перехвата, ни списков: поведение прежнее.
+// Без TUN в конфиге нет ни TUN-входа, ни DNS-перехвата, ни списков: обычный режим.
 func TestTUNOffByDefault(t *testing.T) {
 	m := baseCfg(t, nil)
 	if raw, _ := json.Marshal(m); strings.Contains(string(raw), `"tun"`) || m["dns"] != nil || strings.Contains(string(raw), "rule_set") {

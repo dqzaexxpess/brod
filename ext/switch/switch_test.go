@@ -315,7 +315,7 @@ func concurrent(t *testing.T, serialized bool) {
 }
 
 // Смена цели во время дозвона: соединение, установленное через прежнюю цель, при interrupt_existing не должно пережить смену
-// (оно не попало в группу вовремя и не было бы оборвано Interrupt'ом); без interrupt_existing — остаётся.
+// (оно не попало в группу вовремя и осталось бы не оборванным Interrupt'ом); без interrupt_existing — остаётся.
 func TestSwitchDuringDial(t *testing.T) {
 	for _, interrupt := range []bool{true, false} {
 		r := newRig(t)

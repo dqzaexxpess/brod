@@ -66,7 +66,7 @@ func TestViaWarpDefaultOn(t *testing.T) {
 	if err := c.SetSetting(SetViaWarp, "1", "user"); err != nil || !c.viaWarp() {
 		t.Fatalf("включение: %v", err)
 	}
-	// без аккаунта WARP цепочки нет, как и раньше
+	// без аккаунта WARP цепочки нет
 	if c2 := targetCore(t, newTCheck(), nil); c2.viaWarp() {
 		t.Fatal("без аккаунта WARP цепочки быть не должно")
 	}
@@ -444,7 +444,7 @@ func TestWarpFirstCheckHasLongerWindow(t *testing.T) {
 }
 
 // Каждое включение VPN создаёт ядро заново, и первая проверка по холодному туннелю часто проваливается, хотя через несколько секунд WARP отвечает.
-// На сети, где WARP только что работал, такие провалы в первые warpColdGrace не отключают цепочку; на незнакомой сети вердикт прежний.
+// На сети, где WARP только что работал, такие провалы в первые warpColdGrace не отключают цепочку; на незнакомой сети вердикт обычный.
 func TestWarpColdFailuresAreForgivenOnKnownGoodNetwork(t *testing.T) {
 	lv := &liveness{ok: true}
 	c := rawWarpCore(t, newTCheck(), func(cfg *Config) { cfg.WarpLiveness = lv.fn })
@@ -454,7 +454,7 @@ func TestWarpColdFailuresAreForgivenOnKnownGoodNetwork(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	// сеть без истории: два провала подряд отключают цепочку, как и раньше
+	// сеть без истории: два провала подряд отключают цепочку
 	lv.set(false)
 	c.warpCheck(ctx)
 	c.warpCheck(ctx)
@@ -482,7 +482,7 @@ func TestWarpColdFailuresAreForgivenOnKnownGoodNetwork(t *testing.T) {
 		t.Fatalf("активный узел не должен перерегистрироваться: тег %q, был %q", got, tagBefore)
 	}
 
-	// холодное окно кончилось, а WARP всё молчит: прежний вердикт
+	// холодное окно кончилось, а WARP всё молчит: вердикт обычный
 	c.startedAt = time.Now().Add(-2 * warpColdGrace)
 	c.warpCheck(ctx)
 	c.warpCheck(ctx)

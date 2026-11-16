@@ -358,7 +358,7 @@ func splitApps(v string) []string {
 	return out
 }
 
-// SetNotifyLevel — настройка уведомлений: all (все, как раньше), important (по умолчанию: о деградации только при включённом VPN, без «липких»),
+// SetNotifyLevel — настройка уведомлений: all (все), important (по умолчанию: о деградации только при включённом VPN, без «липких»),
 // off (никаких, кроме проверочного).
 const SetNotifyLevel = "notify.level"
 

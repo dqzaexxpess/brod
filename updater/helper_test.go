@@ -77,7 +77,9 @@ func TestLinuxApplyHelperFailureDoesNotFallBack(t *testing.T) {
 	setcap := false
 	a := &LinuxApply{Stage: stage, Target: target, From: "0.3.0", To: "0.4.0", Result: res,
 		Archive: "/a", Manifest: "/m", Sig: "/s", HelperInstalled: func() bool { return true }, DaemonPath: daemon,
-		Helper:   func(string, string, string) error { return errors.New("exit status 5: манифест отвергнут") },
+		Helper: func(string, string, string) error {
+			return errors.New("exit status 5: манифест отвергнут")
+		},
 		NeedCaps: func(string) bool { return true }, Setcap: func(string) error { setcap = true; return nil }}
 	err := a.Run()
 	if err == nil || !strings.Contains(err.Error(), "установка не начата") || !strings.Contains(err.Error(), "манифест отвергнут") {
@@ -102,7 +104,7 @@ func TestLinuxApplyHelperFailureDoesNotFallBack(t *testing.T) {
 	}
 }
 
-// Переходный режим: помощник не поставлен — прежнее поведение с заметным предупреждением в журнале и в итоге установки.
+// Переходный режим: помощник не поставлен — установка прежним способом (setcap) с заметным предупреждением в журнале и в итоге установки.
 func TestLinuxApplyTransitionWarns(t *testing.T) {
 	skipNonLinux(t)
 	root, target, stage := rig(t)
@@ -111,8 +113,11 @@ func TestLinuxApplyTransitionWarns(t *testing.T) {
 	capsFor := ""
 	a := &LinuxApply{Stage: stage, Target: target, From: "0.3.0", To: "0.4.0", Result: res, Archive: "/a", Manifest: "/m", Sig: "/s",
 		HelperInstalled: func() bool { return false },
-		Helper:          func(string, string, string) error { t.Fatal("помощник не поставлен, но вызван"); return nil },
-		NeedCaps:        func(string) bool { return true }, Setcap: func(f string) error { capsFor = f; return nil },
+		Helper: func(string, string, string) error {
+			t.Fatal("помощник не поставлен, но вызван")
+			return nil
+		},
+		NeedCaps: func(string) bool { return true }, Setcap: func(f string) error { capsFor = f; return nil },
 		Log: func(f string, v ...any) { fmt.Fprintf(&log, f+"\n", v...) }}
 	if err := a.Run(); err != nil {
 		t.Fatal(err)

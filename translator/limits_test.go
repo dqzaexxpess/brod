@@ -7,7 +7,7 @@ import (
 )
 
 // числа из ссылки без верхней границы уходили в движок (strings.Repeat("X", n), make([]byte, n), make([][]byte, jc)).
-// Теперь значение выше предела отклоняет ссылку с причиной value-out-of-range; реальные максимумы из рабочей базы проходят.
+// Значение выше предела отклоняет ссылку с причиной value-out-of-range; реальные максимумы из рабочей базы проходят.
 
 func xhttpLink(extra string) string {
 	return "vless://" + uuid1 + "@192.0.2.1:443?type=xhttp&security=tls&path=/p&mode=packet-up&extra=" + url.QueryEscape(extra)
@@ -44,7 +44,7 @@ func TestXHTTPNumbersOutOfRangeRejected(t *testing.T) {
 	}
 }
 
-// Реальные максимумы по полям из рабочей базы (агрегаты, 164 тыс. узлов) проходят.
+// Реальные максимумы по полям из рабочей базы (публичные агрегаты) проходят.
 func TestXHTTPRealMaximaAccepted(t *testing.T) {
 	ok := []string{
 		`{"xPaddingBytes":"100-4000"}`,

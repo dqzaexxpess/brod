@@ -676,7 +676,7 @@ func TestRefreshIngestsTelegramProxies(t *testing.T) {
 	if l3, _ := c.TGProxies(false, false, "", 0); len(l3.Items) != 3 {
 		t.Fatalf("пропавший прокси не должен показываться: %+v", l3)
 	}
-	// источник вовсе пустой — как раньше сбой, а не «все прокси пропали»
+	// источник вовсе пустой — это сбой, а не «все прокси пропали»
 	f.tg["T"] = nil
 	rep4, _ := c.Refresh(context.Background(), "user")
 	for _, s := range rep4.Sources {

@@ -59,7 +59,7 @@ func TestStandbyRefreshFillsFallbacks(t *testing.T) {
 }
 
 // При деградации замена идёт из резерва: полный поиск альтернатив (проверка кандидатов с нуля) не запускается; из мёртвого резерва — тоже,
-// затем поиск работает как раньше.
+// затем выполняется обычный поиск.
 func TestStandbyUsedOnDegradationWithoutFullSearch(t *testing.T) {
 	lv, fc := &liveness{ok: true}, newFakeCheck()
 	c := healthCore(t, lv, fc)
@@ -104,7 +104,7 @@ func TestStandbyUsedOnDegradationWithoutFullSearch(t *testing.T) {
 	}
 }
 
-// Резерв мёртв (все запасные не отвечают сейчас): быстрый путь ничего не находит, и работает прежний поиск с нуля.
+// Резерв мёртв (все запасные не отвечают сейчас): быстрый путь ничего не находит, и выполняется обычный поиск с нуля.
 func TestStandbyDeadFallsBackToFullSearch(t *testing.T) {
 	lv, fc := &liveness{ok: true}, newFakeCheck()
 	c := healthCore(t, lv, fc)
@@ -187,7 +187,7 @@ func TestAutoSwapRespectsUserChoiceForGracePeriod(t *testing.T) {
 	if sel, _ := c.st.Selection(store.ScopeActive); sel.Node != active || sel.By != "user" {
 		t.Fatalf("выбор изменился: %+v", sel)
 	}
-	// деградация держится дольше паузы: теперь замена разрешена
+	// деградация держится дольше паузы: замена разрешена
 	skew.Store(int64(altRetry/time.Second) + 70)
 	_, _ = c.ProbeActive(ctx)
 	waitFor(t, "автозамена после паузы", func() bool { return len(eventsOf(c, EvAutoSwap)) == 1 })

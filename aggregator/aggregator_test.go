@@ -238,7 +238,7 @@ func TestStaleCacheNotParsedWhenSkipped(t *testing.T) {
 	if r.Err != nil || !r.FromCache || len(r.Links) != 0 || r.Bytes == 0 {
 		t.Fatalf("ожидался кэш без разбора: %+v", r)
 	}
-	// кэша нет вовсе — это по-прежнему ошибка
+	// кэша нет вовсе — ошибка
 	r = <-Fetch(context.Background(), []Source{{Name: "none", URL: srv.URL, SkipStaleParse: true}}, 5*time.Second, t.TempDir())
 	if r.Err == nil {
 		t.Fatal("без кэша и сети должна быть ошибка")

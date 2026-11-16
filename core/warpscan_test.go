@@ -275,7 +275,7 @@ func TestBestWarpPrefersStabilityOverSpeed(t *testing.T) {
 }
 
 // Ручные параметры («Применить») должны переживать пересоздание ядра: они становятся запомненным профилем текущей сети,
-// иначе preapplyWarpProfile затирал бы их прежним запомненным профилем.
+// иначе их затирал бы запомненный профиль (preapplyWarpProfile).
 func TestSetWarpParamsRemembersProfileForNetwork(t *testing.T) {
 	c, _ := scanCore(t, func(WarpProfile) prober.Result { return prober.Result{} })
 	c.cfg.NetID = func() string { return "wifi:test" }

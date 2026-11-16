@@ -502,7 +502,7 @@ func TestTargetPassiveStallNeedsConfirmation(t *testing.T) {
 	if tc.calls[cur] == 0 {
 		t.Fatal("подтверждающая проверка не запускалась")
 	}
-	// теперь узел цели действительно мёртв: подтверждение провалится K раз, и сработает политика
+	// узел цели действительно мёртв: подтверждение провалится K раз, и сработает политика
 	tc.set(cur, false)
 	c.onTargetStall(monitor.Event{Scope: store.TargetScope("videosite"), Stalled: 5})
 	waitFor(t, "автопереключение после подтверждения", func() bool { return c.currentOf("videosite") != cur })

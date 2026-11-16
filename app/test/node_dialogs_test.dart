@@ -1,4 +1,4 @@
-// T-9: диалоги переименования узла и правки своего сервера (node_dialogs.dart, раньше покрытие 0%): действия доходят до API,
+// диалоги переименования узла и правки своего сервера (node_dialogs.dart): действия доходят до API,
 // отмена ничего не меняет, отказ API показывается в окне и не закрывает его.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';

@@ -297,7 +297,7 @@ var apiLogged = struct {
 	at map[string]time.Time
 }{at: map[string]time.Time{}}
 
-// logAPIError пишет в журнал демона каждую ошибку, которую API вернул клиенту (метод, путь, код, текст): раньше по журналу нельзя было
+// logAPIError пишет в журнал демона каждую ошибку, которую API вернул клиенту (метод, путь, код, текст): по журналу можно
 // восстановить, что именно видел пользователь в окне. Повтор одной и той же ошибки — не чаще раза в 30 с (приложение опрашивает API).
 func logAPIError(method, path string, code int, body string) {
 	if code < 400 || code == http.StatusUnauthorized {

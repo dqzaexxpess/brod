@@ -142,7 +142,7 @@ func TestCheckPrioritizesFavoritesAndHistory(t *testing.T) {
 	})
 	plain, fav, proven := addNode(t, c, "plain"), addNode(t, c, "fav"), addNode(t, c, "proven")
 	_ = c.SetFavorite(fav, true, "user")
-	// proven раньше работал (давно, поэтому не свежий), plain без истории
+	// proven проверялся успешно давно (поэтому не свежий), plain без истории
 	_ = c.st.Record([]store.Row{{Node: proven, NodeClass: "direct/tcp/none", Net: "net1", Level: 2, OK: true, At: time.Now().Add(-3 * time.Hour)}})
 	if _, err := c.CheckNow(context.Background(), CheckOptions{}, "user"); err != nil {
 		t.Fatal(err)

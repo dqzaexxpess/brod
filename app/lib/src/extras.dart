@@ -354,7 +354,7 @@ const rulePresets = <RulePreset>[
   RulePreset('Российское напрямую', 'Яндекс, VK, Ozon, Wildberries, Авито — всегда напрямую', Icons.home_outlined, 'direct', [
     'yandex.ru', 'yandex.net', 'ya.ru', 'vk.com', 'vk.ru', 'userapi.com', 'mail.ru', 'ok.ru', 'ozon.ru', 'wildberries.ru', 'wb.ru', 'avito.ru', 'sber.ru', 'sberbank.ru', 'tinkoff.ru', 'gosuslugi.ru', 'rutube.ru',
   ]),
-  // проверено на одном домашнем провайдере: без подмены 0 из 3, с подменой 4 из 4; у других провайдеров может не помочь
+  // проверено на одном домашнем провайдере; у других провайдеров может не помочь
   RulePreset('Обход блокировки по SNI', 'Discord, X, Instagram напрямую с подменой SNI (Linux и Windows)', Icons.shield_outlined, 'direct', [
     'discord.com', 'discord.gg', 'discordapp.com', 'discord.media', 'x.com', 'twitter.com', 'twimg.com', 'instagram.com', 'cdninstagram.com',
   ], tlsSpoof: 'www.cloudflare.com', desktopOnly: true),

@@ -19,14 +19,13 @@ import (
 	"brod/tgproxy"
 )
 
-// memLink — синтетическая ссылка VLESS Reality (~330 байт), как в замере.
+// memLink — синтетическая ссылка VLESS Reality (~330 байт), близкая к реальным.
 func memLink(n int) string {
 	return fmt.Sprintf("vless://5b0e5c2e-0000-4000-8000-%012d@h%d.example:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=www.microsoft.com&fp=chrome&pbk=%s&sid=6ba85179e30d4fc2&type=tcp&headerType=none#node-%d-%s",
 		n, n, strings.Repeat("A", 43), n, strings.Repeat("x", 40))
 }
 
-// замер пика памяти обновления источников на данных реального размера: 86 источников, 477 978 ссылок (самый большой 134 939),
-// 110 тыс. разных узлов. Загрузка настоящая (aggregator.Fetch через httptest), база на диске. Запуск:
+// замер пика памяти обновления источников на данных реального размера: десятки источников, сотни тысяч ссылок (самый большой — более ста тысяч), заметно меньше разных узлов. Загрузка настоящая (aggregator.Fetch через httptest), база на диске. Запуск:
 //
 //	BROD_MEMTEST=1 go test ./core -run TestRefreshMemoryPeak -v -count=1
 func TestRefreshMemoryPeak(t *testing.T) {

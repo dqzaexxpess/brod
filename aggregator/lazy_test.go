@@ -54,7 +54,7 @@ func TestLazyFetchReturnsCacheFile(t *testing.T) {
 	}
 }
 
-// Lazy не мешает сбою и устаревшему кэшу: ошибка и FromCache приходят как раньше, без файла кэша; без Lazy файла кэша нет.
+// Lazy не мешает сбою и устаревшему кэшу: ошибка и FromCache приходят без файла кэша; без Lazy файла кэша нет.
 func TestLazyKeepsErrorsAndEagerMode(t *testing.T) {
 	down := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.Error(w, "x", 503) }))
 	defer down.Close()

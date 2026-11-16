@@ -88,7 +88,7 @@ func (t TUNConfig) withDefaults() TUNConfig {
 }
 
 // DefaultTUNInterface — имя TUN-интерфейса по умолчанию: на Windows «Brod» (так он называется в «Сетевых подключениях»), на Linux brod0
-// (то же имя в deploy/NetworkManager-brod.conf; прежнее vpnclient0 оставлено там же, пока не обновлены все установки).
+// (то же имя в deploy/NetworkManager-brod.conf).
 func DefaultTUNInterface() string {
 	if runtime.GOOS == "windows" {
 		return "Brod"
@@ -276,7 +276,7 @@ func applyTUN(cfg map[string]any, t TUNConfig) {
 	}
 	if fakeIPActive(t) {
 		// синтетические адреса получают только запросы A и AAAA, дошедшие до «remote» (локальные правила выше уже отобрали свои домены); остальные типы
-		// записей идут в DoH как раньше. IPv6-диапазона нет, пока IPv6 заблокирован: AAAA получает пустой ответ, как и без FakeIP шёл бы в никуда
+		// записей идут в DoH. IPv6-диапазона нет, пока IPv6 заблокирован: AAAA получает пустой ответ
 		fk := map[string]any{"type": "fakeip", "tag": "fakeip", "inet4_range": "198.18.0.0/15"}
 		if t.AllowIPv6 {
 			fk["inet6_range"] = "fc00::/18"

@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// historiesSQL — прежняя реализация (обход недельных проб по порядку): эталон для кэша.
+// historiesSQL — эталонная реализация без кэша (обход недельных проб по порядку).
 func historiesSQL(s *Store, netID string, now time.Time) (map[string]History, error) {
 	rows, err := s.db.Query(`
 SELECT node, level, target, ok, at, latency_ms FROM probes WHERE net=? AND at>=? ORDER BY at, rowid`, netID, now.Add(-7*24*time.Hour).Unix())
@@ -89,7 +89,7 @@ func sameHist(t *testing.T, s *Store, net string, now time.Time, ctx string) {
 	}
 }
 
-// Кэш Histories совпадает с прежним SQL-обходом при любом порядке записи, ничьих по времени, разных now и чистке.
+// Кэш Histories совпадает с SQL-обходом при любом порядке записи, ничьих по времени, разных now и чистке.
 func TestHistoriesCacheMatchesSQL(t *testing.T) {
 	for seed := int64(1); seed <= 40; seed++ {
 		rng := rand.New(rand.NewSource(seed))
@@ -151,7 +151,7 @@ func TestHistoriesSnapshotReuse(t *testing.T) {
 	}
 }
 
-// 40 тыс. проб за неделю, как на телефоне: прежний обход против кэша.
+// Много проб за неделю: SQL-обход против кэша.
 func benchStore(b *testing.B) (*Store, time.Time) {
 	s, err := Open(":memory:")
 	if err != nil {

@@ -139,7 +139,7 @@ func idsOfRecs(rs []store.NodeRec) []string {
 	return out
 }
 
-// pickCandidates (лёгкий отбор из памяти) выбирает тех же кандидатов в том же порядке, что и прежний обход всей таблицы узлов.
+// pickCandidates (лёгкий отбор из памяти) выбирает тех же кандидатов в том же порядке, что и полный обход таблицы узлов.
 func TestPickCandidatesMatchesFullScan(t *testing.T) {
 	for seed := int64(1); seed <= 6; seed++ {
 		rng := rand.New(rand.NewSource(seed))
@@ -169,7 +169,7 @@ func TestPickCandidatesMatchesFullScan(t *testing.T) {
 	}
 }
 
-// freshNodes (из истории) совпадает с прежним фильтром по полному списку.
+// freshNodes (из истории) совпадает с фильтром по полному списку.
 func TestFreshNodesMatchesFullScan(t *testing.T) {
 	rng := rand.New(rand.NewSource(11))
 	c := newCore(t, t.TempDir())

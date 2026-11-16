@@ -95,8 +95,8 @@ class Platform(private val ctx: Context) : PlatformInterface {
         else -> Libbox.InterfaceTypeOther
     }
 
-    // Os.if_nametoindex — один ioctl SIOCGIFINDEX. Прежний java.net.NetworkInterface.getByName перебирал все интерфейсы через getifaddrs, то есть через сокет
-    // netlink, на который у приложения нет права (SELinux, Android 11+): каждое сообщение системы о сети давало отказ, запись в журнал аудита и индекс 0.
+    // Os.if_nametoindex — один ioctl SIOCGIFINDEX. java.net.NetworkInterface.getByName перебирает все интерфейсы через getifaddrs, то есть через сокет
+    // netlink, на который у приложения нет права (SELinux, Android 11+): это даёт отказ, запись в журнал аудита и индекс 0.
     private fun indexOf(name: String): Int = runCatching { android.system.Os.if_nametoindex(name) }.getOrDefault(0)
 
     private fun publish() {

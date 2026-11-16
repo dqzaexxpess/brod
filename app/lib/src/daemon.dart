@@ -89,7 +89,7 @@ class DaemonRunner {
     }
   }
 
-  /// Имя задачи планировщика Windows: так демон запускала установка до службы (install.ps1 теперь её удаляет).
+  /// Имя задачи планировщика Windows: так демон запускала установка до появления службы (install.ps1 её удаляет).
   static const windowsTask = 'Brod daemon';
 
   /// Имя службы Windows (создаёт deploy/windows/install.ps1).

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Воспроизводимо собирает исходники движка в work/src/lx: клон sing-box-lx по зафиксированному тегу/коммиту,
-# нужные сабмодули (shallow) и наши патчи из patches/lx/*.patch. После этого go.mod (replace => ./work/src/lx) собирается как раньше.
+# нужные сабмодули (shallow) и наши патчи из patches/lx/*.patch. После этого go.mod (replace => ./work/src/lx) собирается обычным образом.
 #
 #   scripts/fetch-engine.sh            # если work/src/lx уже есть — только проверяет/досаживает патчи
 set -euo pipefail

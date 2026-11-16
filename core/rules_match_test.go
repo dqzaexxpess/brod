@@ -47,7 +47,7 @@ func newMatchRig(t *testing.T, rules []RouteRule) *matchRig {
 	}
 	proxyPort := ln.Addr().(*net.TCPAddr).Port
 	ln.Close()
-	// подмена адреса назначения теперь делается опциями маршрута правила (в direct-выходе эти поля удалены из sing-box 1.13)
+	// подмена адреса назначения делается опциями маршрута правила (в direct-выходе эти поля удалены из sing-box 1.13)
 	hit := func(o map[string]any, srv *httptest.Server) map[string]any {
 		o["action"], o["outbound"] = "route", "direct"
 		o["override_address"], o["override_port"] = "127.0.0.1", portOf(srv.URL)

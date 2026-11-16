@@ -222,8 +222,8 @@ var DefaultYouTubeURLs = YouTubeURLs{
 var playabilityRe = regexp.MustCompile(`"playabilityStatus":\{"status":"([A-Z_]+)"(?:,"reason":"([^"]*)")?`)
 
 // L4YouTube — googlevideo generate_204 (видеосервера достижимы) и страница просмотра: статус воспроизведения из ytInitialPlayerResponse.
-// Раньше статус брался из innertube-запроса клиента WEB, но он без PO-токена даёт UNPLAYABLE «Video unavailable» и на заведомо рабочем выходе
-// (проверено: страница тут же отдаёт OK) — тест браковал почти все хорошие узлы. Ответ «подтвердите, что вы не бот» — провал с классом bot-check.
+// Статус берётся со страницы просмотра, а не из innertube-запроса клиента WEB: без PO-токена тот даёт UNPLAYABLE «Video unavailable»
+// даже на рабочем выходе. Ответ «подтвердите, что вы не бот» — провал с классом bot-check.
 func L4YouTube(ctx context.Context, p *engine.Probe) Result {
 	return youtubeVia(ctx, p.HTTPClient(15*time.Second, 0), DefaultYouTubeURLs)
 }

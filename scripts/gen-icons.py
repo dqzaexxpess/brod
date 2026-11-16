@@ -197,7 +197,7 @@ if __name__ == "__main__":
         im = tray_icon(c0, c1)
         im.save(os.path.join(ROOT, f"app/assets/tray_{name}.png"))
         im.save(os.path.join(ROOT, f"app/assets/tray_{name}.ico"), format="ICO", sizes=[(16, 16), (20, 20), (24, 24), (32, 32), (48, 48), (64, 64)])
-    # удаляем прежний цветовой ресурс плашки: фон теперь градиент (drawable/ic_launcher_bg.xml)
+    # цветовой ресурс плашки не нужен: фон — градиент (drawable/ic_launcher_bg.xml)
     old = os.path.join(RES, "values/ic_launcher_background.xml")
     if os.path.exists(old):
         os.remove(old)

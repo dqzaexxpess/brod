@@ -177,8 +177,7 @@ func TestNewConditionsValidation(t *testing.T) {
 	}
 }
 
-// Правило по приложению Android (package_name) работает только при find_process: без него движок не узнаёт приложение, и правило молча не срабатывает
-// (так было до исправления: проверено на телефоне, Chrome шёл мимо правил direct и block).
+// Правило по приложению Android (package_name) работает только при find_process: без него движок не узнаёт приложение, и правило молча не срабатывает.
 func TestPackageNameNeedsFindProcess(t *testing.T) {
 	rule := RouteRule{ID: "p", Enabled: true, Action: ActionDirect, Match: RouteMatch{PackageName: []string{"com.android.chrome"}}}
 	if err := rule.validate(); err != nil {

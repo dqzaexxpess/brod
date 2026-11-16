@@ -38,7 +38,7 @@ func TestExtractLinksPrefilterEquivalent(t *testing.T) {
 	}
 }
 
-// 20 МБ подписки с узлами и без прокси Telegram проходят предфильтр быстро (раньше — десятки секунд процессора на телефоне).
+// 20 МБ подписки с узлами и без прокси Telegram проходят предфильтр быстро.
 func TestExtractLinksSkipsHugeNodeList(t *testing.T) {
 	body := []byte(strings.Repeat("vless://11111111-2222-3333-4444-555555555555@host.example:443?type=tcp&security=reality#node\n", 220_000))
 	t0 := time.Now()
