@@ -514,7 +514,7 @@ func (a *app) list(args []string) error {
 		if v, ok := n["speed_kbps"].(float64); ok && v > 0 {
 			speed = fmt.Sprintf("%.1f Мбит/с", v*8/1024)
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s:%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", a.id(str(n, "id")), str(n, "class"), str(n, "server"), str(n, "port"), country, clean, ping, speed, l2,
+		fmt.Fprintf(w, "%s\t%s\t%s:%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", a.id(str(n, "id")), shownClass(str(n, "class")), str(n, "server"), str(n, "port"), country, clean, ping, speed, l2,
 			yn(n["google_api"]), yn(n["youtube"]), strings.Join(marks, " "))
 	}
 	return w.Flush()
@@ -793,7 +793,7 @@ func (a *app) alternatives(args []string) error {
 	fmt.Fprintln(w, "ID\tПРОТОКОЛ\tАДРЕС\tЗАДЕРЖКА\tGOOGLE")
 	for _, x := range alts {
 		nd, _ := x["node"].(map[string]any)
-		fmt.Fprintf(w, "%s\t%s\t%s:%s\t%s мс\t%s\n", a.id(str(nd, "id")), str(nd, "class"), str(nd, "server"), str(nd, "port"), str(x, "latency_ms"), yn(x["google_api"]))
+		fmt.Fprintf(w, "%s\t%s\t%s:%s\t%s мс\t%s\n", a.id(str(nd, "id")), shownClass(str(nd, "class")), str(nd, "server"), str(nd, "port"), str(x, "latency_ms"), yn(x["google_api"]))
 	}
 	return w.Flush()
 }
@@ -1372,4 +1372,15 @@ func (a *app) vpn(args []string) error {
 		fmt.Fprintf(a.env.Out, "последняя ошибка: %s\n", e)
 	}
 	return nil
+}
+
+// shownClass — класс узла для показа: протоколы поверх UDP в ключе статистики записаны с транспортом tcp (ключ не меняется, чтобы не терять
+// накопленную статистику), в списке показывается настоящий транспорт.
+func shownClass(c string) string {
+	for _, p := range []string{"wireguard/", "hysteria/", "hysteria2/", "tuic/"} {
+		if strings.HasPrefix(c, p+"tcp/") {
+			return p + "udp/" + strings.TrimPrefix(c, p+"tcp/")
+		}
+	}
+	return c
 }

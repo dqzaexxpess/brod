@@ -301,6 +301,22 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "ISCC завершился с кодом $LASTEXITCODE" }
           Get-FileHash dist\brod-$ver-windows-amd64-setup.exe -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  $(Split-Path $_.Path -Leaf)" }
 
+      # свой установщик: загрузчик cmd/brodsetup несёт архив релиза и запускает из него Brod.exe --setup (окно в оформлении Brod)
+      - name: Установщик (свой)
+        shell: pwsh
+        run: |
+          $ver = (Select-String -Path buildinfo/buildinfo.go -Pattern '^const Version = "(.*)"$').Matches[0].Groups[1].Value
+          Copy-Item "dist/brod-$ver-windows-amd64.zip" cmd/brodsetup/payload.zip -Force
+          go build -trimpath -ldflags "-s -w -H windowsgui" -o "dist/brod-$ver-windows-amd64-installer.exe" ./cmd/brodsetup
+          if ($LASTEXITCODE -ne 0) { throw "сборка загрузчика завершилась с кодом $LASTEXITCODE" }
+          Get-FileHash "dist/brod-$ver-windows-amd64-installer.exe" -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  $(Split-Path $_.Path -Leaf)" }
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: brod-windows-installer
+          path: dist/brod-*-windows-amd64-installer.exe
+          if-no-files-found: error
+
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: brod-windows-setup

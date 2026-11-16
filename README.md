@@ -24,8 +24,9 @@ VPN-клиент для Linux, Windows и Android на движке [sing-box-lx
 </p>
 <p align="center">
   <img src="screenshots/linux-home-v2.png" width="330" alt="Brod на Linux">
+  <img src="screenshots/windows-home-v2.png" width="320" alt="Brod на Windows">
 </p>
-<p align="center"><sub>Android и Linux (адреса серверов на снимках размыты). Приложение на Windows выглядит так же.</sub></p>
+<p align="center"><sub>Android, Linux и Windows (адреса серверов на снимках размыты).</sub></p>
 
 ## Что умеет
 

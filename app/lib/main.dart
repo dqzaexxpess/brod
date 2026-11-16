@@ -7,14 +7,19 @@ import 'src/android.dart';
 import 'src/api.dart';
 import 'src/model.dart';
 import 'src/prefs.dart';
+import 'src/setup/setup_args.dart';
+import 'src/setup/setup_main.dart';
 import 'src/single.dart';
 import 'src/tray.dart';
 import 'src/ui.dart';
 import 'src/win_notices.dart';
 
-Future<void> main() async {
+Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   if (Platform.isAndroid) return runAndroid();
+  // установка и удаление (setup.exe запускает Brod.exe --setup, «Приложения» — Brod.exe --uninstall): отдельное окно, без демона, трея и единственного экземпляра
+  final setup = parseSetupArgs(args);
+  if (setup.isSetup) return runSetup(setup);
   final api = UnixApi(UnixApi.defaultSocket());
   final model = AppModel(api);
   final prefs = Prefs.load();

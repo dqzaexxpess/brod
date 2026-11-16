@@ -563,7 +563,7 @@ class AppModel extends ChangeNotifier {
 
   /// Правило «через выход» из журнала соединений: ставится первым, чтобы сработало раньше прежних; VPN перезапускается и применяет его.
   Future<bool> sendConnViaExit(ConnRuleOffer o) async {
-    await loadRules();
+    if (!rulesDirty) await loadRules(); // несохранённые правки страницы правил не затираем: правило добавляется к ним и сохраняется вместе
     if (rules.any((r) => r.title == o.title)) {
       toast = 'Такое правило уже есть';
       _notify();

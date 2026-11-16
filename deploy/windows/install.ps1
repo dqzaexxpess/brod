@@ -19,8 +19,10 @@
 # -RestrictPrivileges — урезать привилегии службы до перечня в $privs ниже. Без ключа служба получает полный набор LocalSystem. Перечень
 # составлен по коду, не по запуску: если после установки туннель не поднимается или не ставятся фильтры, ключ не использовать (повторная
 # установка без него возвращает полный набор).
-param([string]$Dir = (Join-Path $env:ProgramFiles 'Brod'), [string]$User = '', [switch]$RestrictPrivileges, [switch]$Update, [string]$Result = '', [string]$From = '', [string]$To = '')
+param([string]$Dir = (Join-Path $env:ProgramFiles 'Brod'), [string]$User = '', [switch]$RestrictPrivileges, [switch]$Update, [string]$Result = '', [string]$From = '', [string]$To = '', [string]$Version = '', [string]$Log = '')
 $ErrorActionPreference = 'Stop'
+# -Log <файл> — протокол вывода (его читает установщик с оформлением Brod: строки показываются на странице хода установки)
+if ($Log) { try { Start-Transcript -Path $Log -Force | Out-Null } catch {} }
 function Write-Result($ok, $err) {
     if (-not $Result) { return }
     $r = [ordered]@{ at = (Get-Date).ToUniversalTime().ToString('o'); from = $From; to = $To; ok = $ok }
@@ -88,7 +90,11 @@ if (Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue) {
     Stop-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue
     Unregister-ScheduledTask -TaskName $task -Confirm:$false
 }
-Get-Process -Name brodd, vpnd, Brod, vpn_app -ErrorAction SilentlyContinue | Stop-Process -Force # vpnd и vpn_app — прежние имена
+# процессы из каталога распаковки не трогаем: оттуда может работать окно самого установщика (Brod.exe --setup)
+$srcPrefix = if ((Resolve-Path $src).Path -ne (Resolve-Path -ErrorAction SilentlyContinue $Dir).Path) { (Resolve-Path $src).Path.TrimEnd('\') + '\' } else { $null }
+Get-Process -Name brodd, vpnd, Brod, vpn_app -ErrorAction SilentlyContinue |
+    Where-Object { -not $srcPrefix -or -not $_.Path -or -not $_.Path.StartsWith($srcPrefix, [StringComparison]::OrdinalIgnoreCase) } |
+    Stop-Process -Force # vpnd и vpn_app — прежние имена
 Start-Sleep -Seconds 1
 
 # --- файлы программы ---
@@ -209,6 +215,24 @@ $s = $sh.CreateShortcut($lnk)
 $s.TargetPath = Join-Path $Dir 'Brod.exe'
 $s.WorkingDirectory = $Dir
 $s.Save()
+
+# --- запись в «Параметры → Приложения» ---
+# Прежний установщик (Inno Setup) оставлял ключ {6F3C1B7E-…}_is1 и unins000.*: убираем, иначе в списке приложений две записи Brod, а прежняя
+# программа удаления не знает про текущий порядок. Свой ключ пишется и при обновлении: версия в списке приложений обновляется.
+Remove-Item -Force -ErrorAction SilentlyContinue "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{6F3C1B7E-92A4-4D58-A0E1-5B9D7C2F4A11}_is1"
+Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $Dir 'unins000.exe'), (Join-Path $Dir 'unins000.dat'), (Join-Path $Dir 'unins000.msg')
+$ver = if ($Version) { $Version } else { (Get-Item -LiteralPath (Join-Path $Dir 'Brod.exe')).VersionInfo.ProductVersion }
+$sizeKb = [int]((Get-ChildItem -LiteralPath $Dir -Recurse -File -ErrorAction SilentlyContinue | Measure-Object Length -Sum).Sum / 1KB)
+$uk = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Brod'
+New-Item -Path $uk -Force | Out-Null
+$ucmd = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "' + (Join-Path $Dir 'uninstall.ps1') + '" -Dir "' + $Dir + '"'
+foreach ($kv in @{ DisplayName = 'Brod'; DisplayVersion = $ver; Publisher = 'Brod'; InstallLocation = $Dir; DisplayIcon = (Join-Path $Dir 'Brod.exe');
+        UninstallString = ('"' + (Join-Path $Dir 'Brod.exe') + '" --uninstall'); QuietUninstallString = $ucmd }.GetEnumerator()) {
+    New-ItemProperty -Path $uk -Name $kv.Key -Value $kv.Value -PropertyType String -Force | Out-Null
+}
+foreach ($kv in @{ NoModify = 1; NoRepair = 1; EstimatedSize = $sizeKb }.GetEnumerator()) {
+    New-ItemProperty -Path $uk -Name $kv.Key -Value $kv.Value -PropertyType DWord -Force | Out-Null
+}
 
 Start-Service -Name $svc
 if ($Update) {

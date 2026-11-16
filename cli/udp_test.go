@@ -18,3 +18,19 @@ func TestUDPLine(t *testing.T) {
 		t.Errorf("строка для отсутствия UDP: %s", none)
 	}
 }
+
+func TestShownClassUDPProtocols(t *testing.T) {
+	cases := map[string]string{
+		"wireguard/tcp/none": "wireguard/udp/none",
+		"hysteria2/tcp/tls":  "hysteria2/udp/tls",
+		"tuic/tcp/tls":       "tuic/udp/tls",
+		"vless/tcp/reality":  "vless/tcp/reality",
+		"vless/ws/tls":       "vless/ws/tls",
+		"wireguard/udp/none": "wireguard/udp/none",
+	}
+	for in, want := range cases {
+		if got := shownClass(in); got != want {
+			t.Errorf("%s: %s, ожидалось %s", in, got, want)
+		}
+	}
+}
