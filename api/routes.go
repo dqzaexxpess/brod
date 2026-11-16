@@ -205,6 +205,8 @@ func (s *Server) routes(m *http.ServeMux) {
 	m.HandleFunc("POST /v1/vpn/selftest", s.vpnSelfTest)
 	m.HandleFunc("POST /v1/nodes/{id}/check", s.nodeCheck)
 	m.HandleFunc("POST /v1/active/check", s.activeCheck)
+	m.HandleFunc("POST /v1/nodes/{id}/udp", s.nodeUDP)
+	m.HandleFunc("POST /v1/active/udp", s.activeUDP)
 	m.HandleFunc("GET /v1/sources", s.sources)
 	m.HandleFunc("POST /v1/sources", s.addSource)
 	m.HandleFunc("POST /v1/sources/{name}/enable", s.enableSource)
@@ -1042,6 +1044,32 @@ func (s *Server) activeCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	res, err := s.core().CheckNodeE2E(r.Context(), "active")
+	if err != nil && !errors.Is(err, r.Context().Err()) {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, 200, res)
+}
+
+// nodeUDP — замер UDP через узел (потери и задержка STUN-запросов): годится ли узел для звонков.
+func (s *Server) nodeUDP(w http.ResponseWriter, r *http.Request) {
+	if !onlyUser(w, r) {
+		return
+	}
+	res, err := s.core().ProbeUDP(r.Context(), r.PathValue("id"))
+	if err != nil && !errors.Is(err, r.Context().Err()) {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, 200, res)
+}
+
+// activeUDP — то же для активного выхода.
+func (s *Server) activeUDP(w http.ResponseWriter, r *http.Request) {
+	if !onlyUser(w, r) {
+		return
+	}
+	res, err := s.core().ProbeUDP(r.Context(), "active")
 	if err != nil && !errors.Is(err, r.Context().Err()) {
 		fail(w, err)
 		return

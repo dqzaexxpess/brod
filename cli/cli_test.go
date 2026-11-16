@@ -427,3 +427,11 @@ func TestUpdateCommands(t *testing.T) {
 		t.Fatalf("check без сети: %s", out)
 	}
 }
+
+func TestUDPCommandNeedsActiveNode(t *testing.T) {
+	e := setup(t)
+	code, _, errOut := e.run("udp")
+	if code == 0 || !strings.Contains(errOut, "активного узла нет") {
+		t.Fatalf("без активного узла замер UDP должен отказать: код %d, %q", code, errOut)
+	}
+}

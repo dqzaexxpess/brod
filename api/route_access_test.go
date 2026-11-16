@@ -86,6 +86,8 @@ var routeAccess = map[string]string{
 	"POST /v1/vpn/selftest":                         accessOwner,
 	"POST /v1/nodes/{id}/check":                     accessOwner,
 	"POST /v1/active/check":                         accessOwner,
+	"POST /v1/nodes/{id}/udp":                       accessOwner,
+	"POST /v1/active/udp":                           accessOwner,
 	"GET /v1/sources":                               accessOwner,
 	"POST /v1/sources":                              accessOwner,
 	"POST /v1/sources/{name}/enable":                accessOwner,

@@ -60,6 +60,7 @@ const usage = `brodctl — управление демоном brodd
   vpn autoconnect last|always|off  включать ли VPN при запуске демона: как было / всегда / нет
   vpn selftest                    самотест работающего туннеля: узел насквозь, DNS заблокированного, внешний запрос через туннель (IP выхода), заблокированный сайт
   node-check [УЗЕЛ]               сквозная проверка узла: запрос ЧЕРЕЗ узел до внешнего сайта, выход (IP, страна) или причина провала; без аргумента — активный
+  udp [УЗЕЛ]                      замер UDP через узел (STUN): потери и задержка, годится ли узел для звонков; без аргумента — активный
   rulesets update                 обновить списки маршрутизации TUN (заблокированное, банки, «только внутри РФ») и свои списки
   sets [list|add URL [--title Н]|rm ID]   свои списки маршрутизации по URL (.srs или JSON sing-box); в правилах — rule_set: ["ext-…"]
   notify-test                     проверить уведомления рабочего стола (две тестовые кнопки, узлы не затрагиваются)
@@ -206,6 +207,8 @@ func (a *app) dispatch(cmd string, args []string) error {
 			}
 			return fmt.Sprintf("НЕ работает: %v %v", m["class"], m["detail"])
 		})
+	case "udp":
+		return a.nodeUDP(args)
 	case "alternatives", "alt":
 		return a.alternatives(args)
 	case "refresh":
@@ -623,6 +626,61 @@ func (a *app) nodeCheck(args []string) error {
 	}
 	fmt.Fprintf(a.env.Out, "узел %s НЕ РАБОТАЕТ: %s (%v мс)\n", who, str(r, "detail"), r["ms"])
 	return errors.New("узел не отвечает")
+}
+
+// udpGradeText — понятная оценка UDP-качества узла (grade из prober).
+var udpGradeText = map[string]string{
+	"good":     "ХОРОШО (звонки пойдут)",
+	"unstable": "НЕСТАБИЛЬНО (звонки будут рваться)",
+	"none":     "UDP НЕ ПРОХОДИТ",
+}
+
+// nodeUDP: замер UDP через узел (STUN): потери и задержка. Без аргумента — активный выход. Код возврата 1, если UDP не проходит.
+func (a *app) nodeUDP(args []string) error {
+	path := "/v1/active/udp"
+	switch len(args) {
+	case 0:
+	case 1:
+		path = "/v1/nodes/" + url.PathEscape(args[0]) + "/udp"
+	default:
+		return errUsage
+	}
+	var r map[string]any
+	if err := a.call("POST", path, nil, &r); err != nil {
+		return err
+	}
+	grade := str(r, "grade")
+	if a.show(r) {
+		if grade == "none" {
+			return errors.New("UDP через узел не проходит")
+		}
+		return nil
+	}
+	fmt.Fprintln(a.env.Out, udpLine(r))
+	if grade == "none" {
+		return errors.New("UDP через узел не проходит")
+	}
+	return nil
+}
+
+// udpLine — одна строка итога замера UDP для консоли.
+func udpLine(r map[string]any) string {
+	grade := str(r, "grade")
+	who := str(r, "node")
+	if who == "" {
+		who = str(r, "proto")
+	} else if len(who) > 10 {
+		who = who[:10]
+	}
+	text := udpGradeText[grade]
+	if text == "" {
+		text = grade
+	}
+	if grade == "none" {
+		return fmt.Sprintf("узел %s: %s (%s; сервер %s)", who, text, str(r, "detail"), str(r, "server"))
+	}
+	return fmt.Sprintf("узел %s (%s): %s. Ответов %v из %v, потери %.0f%%, задержка %v мс (от %v до %v); сервер %s",
+		who, str(r, "proto"), text, r["received"], r["sent"], r["loss_pct"], r["median_ms"], r["min_ms"], r["max_ms"], str(r, "server"))
 }
 
 // vpnSelfTest: самотест работающего туннеля; код возврата 1, если хоть один шаг не прошёл.
