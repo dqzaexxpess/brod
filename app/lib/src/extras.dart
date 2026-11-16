@@ -324,7 +324,7 @@ Future<void> warpImportDialog(BuildContext context, AppModel m) async {
 
 /// Готовый набор правил маршрутизации, добавляемый одной кнопкой.
 class RulePreset {
-  const RulePreset(this.title, this.subtitle, this.icon, this.action, this.suffixes, {this.tlsSpoof = '', this.desktopOnly = false});
+  const RulePreset(this.title, this.subtitle, this.icon, this.action, this.suffixes, {this.tlsSpoof = '', this.desktopOnly = false, this.build});
 
   final String title;
   final String subtitle;
@@ -333,9 +333,27 @@ class RulePreset {
   final List<String> suffixes;
   final String tlsSpoof; // имя сайта для подмены SNI ('' — без подмены)
   final bool desktopOnly; // не показывать на Android
+  final List<RouteRuleDto> Function()? build; // набор из нескольких правил со своими условиями (вместо одного по доменам)
+
+  /// Правила, которые добавляет шаблон.
+  List<RouteRuleDto> rules() =>
+      build?.call() ?? [RouteRuleDto(title: title, action: action, match: RouteMatch(domainSuffix: [...suffixes]), tlsSpoof: tlsSpoof)];
 }
 
+/// Голос и звонки Discord. Голосовой сервер приходит в соединении без домена (адрес и порт 19xxx по UDP), поэтому правила по доменам
+/// его не ловят: в режиме «Только заблокированное» он уходил напрямую, а провайдер часть таких направлений режет (пинг в звонке 3–5 с).
+List<RouteRuleDto> discordCallRules() => [
+      if (Platform.isAndroid)
+        RouteRuleDto(title: 'Звонки Discord: приложение', match: RouteMatch(packageName: ['com.discord']))
+      else
+        RouteRuleDto(title: 'Звонки Discord: процесс', match: RouteMatch(processName: ['Discord.exe', 'Discord', 'discord'])),
+      RouteRuleDto(title: 'Звонки Discord: голос по UDP', match: RouteMatch(network: 'udp', portRange: ['19294:19344', '50000:65535'])),
+      RouteRuleDto(title: 'Звонки Discord: домены', match: RouteMatch(domainSuffix: ['discord.com', 'discord.gg', 'discordapp.com', 'discordapp.net', 'discord.media'])),
+    ];
+
 const rulePresets = <RulePreset>[
+  RulePreset('Звонки Discord', 'Процесс, домены и UDP-порты голоса — через VPN, в том числе в режиме «Только заблокированное»', Icons.headset_mic_outlined, 'proxy', [],
+      build: discordCallRules),
   RulePreset('Мессенджеры', 'Telegram, WhatsApp, Discord, Signal — через VPN', Icons.chat_bubble_outline, 'proxy', [
     'telegram.org', 't.me', 'telegram.me', 'telesco.pe', 'whatsapp.com', 'whatsapp.net', 'discord.com', 'discord.gg', 'discordapp.com', 'discord.media', 'signal.org', 'signal.art',
   ]),

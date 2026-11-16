@@ -327,7 +327,9 @@ func applyTUN(cfg map[string]any, t TUNConfig) {
 		}
 		rules = append(rules, o)
 	}
-	if needProcess {
+	// на Windows имя процесса определяется всегда: в журнале соединений по нему видно, чей трафик ушёл напрямую, и из журнала можно
+	// создать правило «через выход» для процесса
+	if needProcess || runtime.GOOS == "windows" {
 		route["find_process"] = true
 	}
 	if len(direct) > 0 {

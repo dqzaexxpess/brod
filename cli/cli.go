@@ -447,7 +447,7 @@ func (a *app) status() error {
 		case w["via_warp"] == true:
 			fmt.Fprintln(a.env.Out, "WARP: настроен, проверки и подключения идут цепочкой через него")
 		case w["enabled"] == true:
-			fmt.Fprintln(a.env.Out, "WARP: настроен (кандидат целей; цепочка выключена: settings set check.via_warp 1)")
+			fmt.Fprintln(a.env.Out, "WARP: настроен (кандидат целей); цепочка сейчас не используется: выключена настройкой check.via_warp или WARP недоступен")
 		default:
 			fmt.Fprintln(a.env.Out, "WARP: не настроен (brodctl warp register или brodctl warp import ФАЙЛ)")
 		}

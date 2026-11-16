@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 
 import 'android_bridge.dart';
 import 'api.dart';
+import 'conn_rule.dart';
 import 'daemon.dart';
 import 'daemon_errors.dart';
 import 'opener.dart';
@@ -558,6 +559,19 @@ class AppModel extends ChangeNotifier {
       _fail('$e');
     }
     return null;
+  }
+
+  /// Правило «через выход» из журнала соединений: ставится первым, чтобы сработало раньше прежних; VPN перезапускается и применяет его.
+  Future<bool> sendConnViaExit(ConnRuleOffer o) async {
+    await loadRules();
+    if (rules.any((r) => r.title == o.title)) {
+      toast = 'Такое правило уже есть';
+      _notify();
+      return true;
+    }
+    rules = [RouteRuleDto(title: o.title, action: 'proxy', match: o.match), ...rules];
+    rulesDirty = true;
+    return saveRules();
   }
 
   void addRule(RouteRuleDto r) {

@@ -93,21 +93,79 @@ begin
   end;
 end;
 
+procedure ExitProcess(ExitCode: Cardinal);
+  external 'ExitProcess@kernel32.dll stdcall';
+
+const
+  ExitServiceFailed = 10;
+
+function PowerShell(const Command: String; var Code: Integer): Boolean;
+begin
+  Result := Exec('powershell.exe', '-NoProfile -ExecutionPolicy Bypass -Command "' + Command + '"', '', SW_HIDE, ewWaitUntilTerminated, Code);
+end;
+
+// Учётная запись проверяется до копирования файлов: после копирования откатить установку нечем, а код возврата
+// Inno Setup из CurStepChanged не меняется.
+function UserIsValid(const Account: String): Boolean;
+var
+  Code: Integer;
+begin
+  Result := False;
+  if (Pos('''', Account) > 0) or (Pos('"', Account) > 0) then Exit;
+  Result := PowerShell('try { (New-Object Security.Principal.NTAccount(''' + Account +
+    ''')).Translate([Security.Principal.SecurityIdentifier]) | Out-Null; exit 0 } catch { exit 1 }', Code) and (Code = 0);
+end;
+
+function NextButtonClick(CurPageID: Integer): Boolean;
+begin
+  Result := True;
+  if CurPageID = UserPage.ID then
+    if not UserIsValid(BrodUser()) then
+    begin
+      MsgBox('Не удалось найти учётную запись «' + BrodUser() + '». Укажите её в виде ДОМЕН\Имя или ИМЯ_КОМПЬЮТЕРА\Имя.', mbError, MB_OK);
+      Result := False;
+    end;
+end;
+
+// Служба и приложение держат свои файлы: без остановки замена brodd.exe и Brod.exe падает с «отказано в доступе».
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  Code: Integer;
+begin
+  Result := '';
+  if not UserIsValid(BrodUser()) then
+  begin
+    Result := 'Не удалось найти учётную запись «' + BrodUser() + '» (параметр /USER=ДОМЕН\Имя). Установка не начата.';
+    Exit;
+  end;
+  Log('Остановка службы Brod и приложения перед копированием файлов');
+  PowerShell('$s = Get-Service Brod -ErrorAction SilentlyContinue; ' +
+    'if ($s) { Stop-Service Brod -Force -ErrorAction SilentlyContinue; try { $s.WaitForStatus(''Stopped'', ''00:00:30'') } catch {} }; ' +
+    'Get-Process Brod, brodd -ErrorAction SilentlyContinue | Stop-Process -Force; Start-Sleep 1', Code);
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   Code: Integer;
-  Log, Cmd: String;
+  LogFile, Cmd, Msg: String;
 begin
   if CurStep = ssPostInstall then
   begin
-    Log := ExpandConstant('{tmp}\brod-install.log');
-    Cmd := '/C powershell.exe -NoProfile -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\install.ps1') +
-           '" -Dir "' + ExpandConstant('{app}') + '" -User "' + BrodUser() + '" > "' + Log + '" 2>&1';
+    LogFile := ExpandConstant('{tmp}\brod-install.log');
+    // chcp 1251: вывод PowerShell читается Inno Setup как ANSI, а консоль по умолчанию отдаёт OEM 866 (кириллица превращалась в мусор)
+    Cmd := '/C chcp 1251 > nul & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\install.ps1') +
+           '" -Dir "' + ExpandConstant('{app}') + '" -User "' + BrodUser() + '" > "' + LogFile + '" 2>&1';
+    Log('Запуск install.ps1');
     if (not Exec(ExpandConstant('{cmd}'), Cmd, '', SW_HIDE, ewWaitUntilTerminated, Code)) or (Code <> 0) then
     begin
-      SuppressibleMsgBox('Не удалось установить службу Brod (код ' + IntToStr(Code) + ').' + #13#10#13#10 + LogTail(Log) + #13#10 +
-        'Повторите установку или запустите install.ps1 вручную из ' + ExpandConstant('{app}') + '.', mbError, MB_OK, IDOK);
-      Abort;
+      Msg := 'Не удалось установить службу Brod (код ' + IntToStr(Code) + ').' + #13#10#13#10 + LogTail(LogFile) + #13#10 +
+        'Повторите установку или запустите install.ps1 вручную из ' + ExpandConstant('{app}') + '.';
+      Log(Msg);
+      // служба могла остаться остановленной после замены файлов
+      PowerShell('Start-Service Brod -ErrorAction SilentlyContinue', Code);
+      if not WizardSilent then MsgBox(Msg, mbError, MB_OK);
+      // Abort здесь завершил бы установку с кодом 0: скрипты развёртывания приняли бы её за успешную
+      ExitProcess(ExitServiceFailed);
     end;
   end;
 end;

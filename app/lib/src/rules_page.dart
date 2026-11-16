@@ -276,11 +276,11 @@ class _RulesPageState extends State<RulesPage> {
               leading: Icon(p.icon),
               title: Text(p.title),
               subtitle: Text(p.subtitle),
-              trailing: m.rules.any((r) => r.title == p.title) ? const Icon(Icons.check, color: Colors.green) : const Icon(Icons.add),
-              onTap: m.rules.any((r) => r.title == p.title)
+              trailing: m.rules.any((r) => r.title.startsWith(p.title)) ? const Icon(Icons.check, color: Colors.green) : const Icon(Icons.add),
+              onTap: m.rules.any((r) => r.title.startsWith(p.title))
                   ? null
                   : () {
-                      m.addRule(RouteRuleDto(title: p.title, action: p.action, match: RouteMatch(domainSuffix: [...p.suffixes]), tlsSpoof: p.tlsSpoof));
+                      p.rules().forEach(m.addRule);
                       Navigator.pop(ctx);
                     },
             ),

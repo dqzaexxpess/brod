@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 
 import 'android_bridge.dart';
 import 'api.dart';
+import 'conn_rule.dart';
 import 'format.dart';
 import 'model.dart';
 import 'widgets.dart';
@@ -305,6 +306,22 @@ class _ConnDetails extends StatelessWidget {
         if (c.process.isNotEmpty) row('Процесс', c.process),
         row('Трафик', '↓ ${fmtBytes(c.down)}   ↑ ${fmtBytes(c.up)}'),
         row('Открыто', '${fmtAge(c.started)} назад${c.open ? '' : ' (закрыто)'}'),
+        if (c.route != 'proxy' && connRuleOffers(c).isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Text('Отправить через выход (VPN перезапустится):', style: Theme.of(context).textTheme.bodySmall),
+          for (final o in connRuleOffers(c))
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                icon: const Icon(Icons.alt_route),
+                label: Text(o.label),
+                onPressed: () {
+                  model.sendConnViaExit(o);
+                  Navigator.pop(context);
+                },
+              ),
+            ),
+        ],
         if (c.open) ...[
           const SizedBox(height: 12),
           FilledButton.tonalIcon(

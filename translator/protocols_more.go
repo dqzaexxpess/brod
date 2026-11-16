@@ -196,6 +196,19 @@ func wgKeyOK(k string) bool {
 	return false
 }
 
+// splitAddrs делит список адресов интерфейса: через запятую (v2rayN) или через «-» (Throne: 10.0.0.2/32-fd00::2/128).
+func splitAddrs(s string) []string {
+	var out []string
+	for _, x := range splitList(s) {
+		for _, y := range strings.Split(x, "-") {
+			if y = strings.TrimSpace(y); y != "" {
+				out = append(out, y)
+			}
+		}
+	}
+	return out
+}
+
 func parseWireGuard(link string) (*Outbound, error) {
 	u, err := url.Parse(link)
 	if err != nil {
@@ -206,15 +219,20 @@ func parseWireGuard(link string) (*Outbound, error) {
 		return nil, err
 	}
 	q := u.Query()
+	// ключи base64 содержат «+», который разбор запроса читает как пробел; для ключей берём значения с сохранённым плюсом
+	kq, _ := url.ParseQuery(strings.ReplaceAll(u.RawQuery, "+", "%2B"))
 	priv := u.User.Username()
-	pub := qget(q, "publickey", "public_key", "peer_public_key", "pub")
+	if priv == "" { // Throne и часть клиентов кладут приватный ключ в параметр, а не в userinfo
+		priv = qget(kq, "private_key", "privatekey", "privateKey")
+	}
+	pub := qget(kq, "publickey", "public_key", "peer_public_key", "pub")
 	if priv == "" || pub == "" {
 		return nil, fail(ReasonMissingField, "wireguard: private/public key")
 	}
 	if !wgKeyOK(priv) || !wgKeyOK(pub) {
 		return nil, fail(ReasonMissingField, "wireguard: ключ не 32 байта base64")
 	}
-	addrs := splitList(qget(q, "address", "ip", "local_address"))
+	addrs := splitAddrs(qget(q, "address", "ip", "local_address"))
 	if len(addrs) == 0 {
 		return nil, fail(ReasonMissingField, "wireguard: address")
 	}
@@ -228,7 +246,7 @@ func parseWireGuard(link string) (*Outbound, error) {
 		}
 	}
 	peer := map[string]any{"address": host, "port": port, "public_key": pub, "allowed_ips": []string{"0.0.0.0/0", "::/0"}}
-	if psk := qget(q, "presharedkey", "pre_shared_key", "psk"); psk != "" {
+	if psk := qget(kq, "presharedkey", "pre_shared_key", "psk"); psk != "" {
 		if !wgKeyOK(psk) {
 			return nil, fail(ReasonMissingField, "wireguard: psk не 32 байта base64")
 		}
@@ -247,6 +265,9 @@ func parseWireGuard(link string) (*Outbound, error) {
 		if rv != nil {
 			peer["reserved"] = rv
 		}
+	}
+	if n, e := strconv.Atoi(qget(q, "persistent_keepalive_interval", "persistent_keepalive", "keepalive")); e == nil && n > 0 && n <= 65535 {
+		peer["persistent_keepalive_interval"] = n
 	}
 	mtu := 1280
 	if n, e := strconv.Atoi(qget(q, "mtu")); e == nil && n >= 576 && n <= 1500 {
