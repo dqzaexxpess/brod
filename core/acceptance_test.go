@@ -78,7 +78,7 @@ func tryStartXray(t *testing.T, xray string, port int) (*xrayNode, error) {
 		"inbounds": []any{map[string]any{"listen": "127.0.0.1", "port": port, "protocol": "vless",
 			"settings":       map[string]any{"clients": []any{map[string]any{"id": accUUID}}, "decryption": "none"},
 			"streamSettings": map[string]any{"network": "tcp", "security": "none"}}},
-		"outbounds": []any{map[string]any{"protocol": "freedom", "settings": map[string]any{"finalRules": []any{map[string]any{"action": "allow", "ip": []any{"127.0.0.0/8"}}}}}},
+		"outbounds": []any{map[string]any{"protocol": "freedom", "settings": map[string]any{"domainStrategy": "UseIPv4", "finalRules": []any{map[string]any{"action": "allow", "ip": []any{"127.0.0.0/8"}}}}}},
 	}
 	b, _ := json.Marshal(cfg)
 	path := filepath.Join(t.TempDir(), "srv.json")
