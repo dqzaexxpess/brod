@@ -10,9 +10,9 @@ on:
         options: [all, android, windows, aar]
         default: all
       mode:
-        description: "Сборка Android: release (быстрая, для проверки плавности) или debug (с отладкой)"
+        description: "Сборка Android: release (быстрая, для проверки плавности) или debug (с отладкой); gradle-verify — заново сгенерировать суммы зависимостей Gradle из настоящих репозиториев (артефакт gradle-verification-ci)"
         type: choice
-        options: [release, debug]
+        options: [release, debug, gradle-verify]
         default: release
 
 permissions:
@@ -87,6 +87,7 @@ jobs:
       # release собирается неподписанным (BROD_UNSIGNED=1) и подписывается отдельным заданием sign-android.
       # debug подписывается отладочным ключом Android и в подпись не идёт.
       - name: Сборка APK
+        if: inputs.mode != 'gradle-verify'
         env:
           BROD_UNSIGNED: ${{ (inputs.mode || 'release') == 'release' && '1' || '' }}
           BROD_ALLOW_DEBUG_SIGNING: ${{ (inputs.mode || 'release') == 'debug' && '1' || '' }}
@@ -95,7 +96,32 @@ jobs:
           flutter pub get
           flutter build apk --${{ inputs.mode || 'release' }} --target-platform android-arm64
 
+      # суммы зависимостей Gradle заново из того, что отдают репозитории раннера (Google Maven, Maven Central, Gradle Plugin Portal):
+      # текущий файл удаляется, Gradle пишет полный набор; результат сравнивается с app/android/gradle/verification-metadata.xml
+      - name: Суммы зависимостей Gradle (генерация)
+        if: inputs.mode == 'gradle-verify'
+        env:
+          BROD_UNSIGNED: "1"
+          BROD_ALLOW_DEBUG_SIGNING: "1"
+        working-directory: app
+        run: |
+          # первая сборка без проверки: Flutter создаёт gradlew и наполняет кэш Gradle; суммы пишутся уже из этого кэша
+          export GRADLE_OPTS="-Dorg.gradle.dependency.verification=off"
+          flutter pub get
+          flutter build apk --debug --target-platform android-arm64
+          rm android/gradle/verification-metadata.xml
+          cd android
+          ./gradlew --no-daemon --write-verification-metadata sha256 :app:assembleRelease :app:assembleDebug
+
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: inputs.mode == 'gradle-verify'
+        with:
+          name: gradle-verification-ci
+          path: app/android/gradle/verification-metadata.xml
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: inputs.mode != 'gradle-verify'
         with:
           name: ${{ (inputs.mode || 'release') == 'release' && 'brod-android-unsigned' || 'brod-android' }}
           path: app/build/app/outputs/flutter-apk/app-*.apk
