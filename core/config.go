@@ -78,6 +78,7 @@ type Config struct {
 	Speed        SpeedFunc                                                 // замер скорости узла (тесты подменяют); nil = prober.L3 на 2 МБ
 	SpeedBatch   int                                                       // сколько узлов замерять за круг (по умолчанию 4)
 	SpeedTTL     time.Duration                                             // через сколько замер устаревает (по умолчанию 6 ч)
+	UDPTTL       time.Duration                                             // то же для замера UDP («для звонков»; по умолчанию 6 ч)
 	ExitInterval time.Duration                                             // период фонового сбора сведений о выходах (по умолчанию 3 мин)
 	ExitBatch    int                                                       // сколько узлов за круг (по умолчанию 12)
 	ExitTTL      time.Duration                                             // через сколько сведения устаревают (по умолчанию 24 ч)
@@ -257,6 +258,9 @@ func (c *Config) defaults() error {
 	}
 	if c.SpeedBatch == 0 {
 		c.SpeedBatch = 4
+	}
+	if c.UDPTTL == 0 {
+		c.UDPTTL = 6 * time.Hour
 	}
 	if c.SpeedTTL == 0 {
 		c.SpeedTTL = 6 * time.Hour

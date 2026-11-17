@@ -39,7 +39,7 @@ func (s *Store) DeleteOwn(id string) error {
 		return err
 	}
 	if other == 0 {
-		for _, q := range []string{`DELETE FROM nodes WHERE id=?`, `DELETE FROM exit_info WHERE node=?`, `DELETE FROM node_speed WHERE node=?`} {
+		for _, q := range []string{`DELETE FROM nodes WHERE id=?`, `DELETE FROM exit_info WHERE node=?`, `DELETE FROM node_speed WHERE node=?`, `DELETE FROM node_udp WHERE node=?`} {
 			if _, err := tx.Exec(q, id); err != nil {
 				tx.Rollback()
 				return err

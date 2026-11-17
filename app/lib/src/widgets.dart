@@ -40,6 +40,14 @@ Color speedColor(double mbps, ColorScheme cs) => mbps >= 10 ? Colors.green : (mb
       _ => (label: '', color: null),
     };
 
+/// Метка «для звонков» по замеру UDP: голос и видео идут по UDP, а проверки HTTPS о нём ничего не говорят. Нет замера — метки нет.
+({String label, IconData icon, Color color})? callsStyle(String udp, ColorScheme cs) => switch (udp) {
+      'good' => (label: 'для звонков', icon: Icons.headset_mic_outlined, color: Colors.green),
+      'unstable' => (label: 'звонки рвутся', icon: Icons.headset_off_outlined, color: Colors.orange),
+      'none' => (label: 'нет UDP', icon: Icons.headset_off_outlined, color: cs.error),
+      _ => null,
+    };
+
 /// Строка таблеток узла: пинг, скорость, чистота, YouTube, «мой».
 class NodePills extends StatelessWidget {
   const NodePills({super.key, required this.node});
@@ -55,6 +63,7 @@ class NodePills extends StatelessWidget {
       if (node.own) const Pill(text: 'мой', icon: Icons.star_rounded, color: Colors.purple, filled: true),
       if (node.latencyMs > 0) Pill(text: '${node.latencyMs} мс', icon: Icons.network_ping, color: pingColor(node.latencyMs, cs)),
       if (node.speedKBps > 0) Pill(text: '${node.speedMbps.toStringAsFixed(node.speedMbps < 10 ? 1 : 0)} Мбит/с', icon: Icons.speed, color: speedColor(node.speedMbps, cs)),
+      if (callsStyle(node.udp, cs) case final c?) Pill(text: c.label, icon: c.icon, color: c.color, filled: node.udp == 'good'),
       if (cl != null && cl.label.isNotEmpty) Pill(text: cl.label, icon: Icons.verified_user_outlined, color: cl.color, filled: true),
       if (node.youtube) Pill(text: 'YouTube', icon: Icons.play_circle_outline, color: cs.primary),
       if (node.insecure) Pill(text: 'без проверки TLS', icon: Icons.warning_amber, color: cs.error),

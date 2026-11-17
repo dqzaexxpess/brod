@@ -391,6 +391,7 @@ class _NodeCard extends StatelessWidget {
       port: node.port,
       latencyMs: node.latencyMs,
       speedKBps: node.speedKBps,
+      udp: node.udp,
       exit: node.clean.isEmpty && node.country.isEmpty ? null : ExitDto(ip: node.ip, country: node.country, clean: node.clean),
     );
     return Card.filled(

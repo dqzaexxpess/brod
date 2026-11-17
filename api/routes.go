@@ -40,6 +40,9 @@ type nodeDTO struct {
 	LatencyMs  int64      `json:"latency_ms,omitempty"` // пинг: задержка последней успешной проверки
 	SpeedKBps  float64    `json:"speed_kbps,omitempty"` // скорость скачивания через узел, КБ/с
 	SpeedAt    *time.Time `json:"speed_at,omitempty"`
+	UDP        string     `json:"udp,omitempty"`    // good | unstable | none: годен ли узел для звонков (замер UDP в текущей сети)
+	UDPMs      int64      `json:"udp_ms,omitempty"` // медиана задержки STUN-ответов
+	UDPAt      *time.Time `json:"udp_at,omitempty"`
 }
 
 // exitDTO — страна и «чистота» выхода (Cloudflare trace через узел + поведенческие проверки).
@@ -71,6 +74,7 @@ func nodeFromView(v core.NodeView) nodeDTO {
 	d.Exit = exitFrom(v.Exit)
 	d.LatencyMs, d.SpeedKBps, d.SpeedAt, d.Own = v.LatencyMs, v.SpeedKBps, tp(v.SpeedAt), v.Own
 	d.Label = v.Label
+	d.UDP, d.UDPMs, d.UDPAt = v.UDP, v.UDPMs, tp(v.UDPAt)
 	return d
 }
 

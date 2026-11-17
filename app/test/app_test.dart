@@ -113,6 +113,12 @@ class FakeApi implements DaemonApi {
   }
 
   @override
+  Future<({String grade, int medianMs, int lossPct})> probeUdp(String id) async {
+    calls.add('udp $id');
+    return (grade: 'good', medianMs: 70, lossPct: 0);
+  }
+
+  @override
   Future<TrafficStats> traffic({int n = 120}) async =>
       TrafficStats(samples: [for (var i = 0; i < 5; i++) TrafficSample(1000 + i, 100 * i, 1000 * i)], upNow: 400, downNow: 4000, upTotal: 5000, downTotal: 50000, conns: 2);
 
@@ -1213,6 +1219,15 @@ void main() {
     expect(titles.length, rulePresets.length, reason: 'названия уникальны: по ним определяется «уже добавлено»');
     for (final p in rulePresets) {
       expect(['proxy', 'direct'], contains(p.action));
+      if (p.build != null) {
+        // набор из нескольких правил: названия начинаются с названия шаблона (по нему определяется «уже добавлено»), условия не пустые
+        final rules = p.rules();
+        expect(rules, isNotEmpty, reason: p.title);
+        for (final r in rules) {
+          expect(r.title, startsWith(p.title));
+        }
+        continue;
+      }
       expect(p.suffixes, isNotEmpty);
       for (final d in p.suffixes) {
         expect(d, matches(RegExp(r'^[a-z0-9.-]+\.[a-z]{2,}$')), reason: p.title);

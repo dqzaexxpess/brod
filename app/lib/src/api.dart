@@ -693,6 +693,8 @@ class NodeDto {
     this.exit,
     this.latencyMs = 0,
     this.speedKBps = 0,
+    this.udp = '',
+    this.udpMs = 0,
     this.own = false,
     this.label = '',
   });
@@ -713,12 +715,14 @@ class NodeDto {
   final String label; // пользовательское название ('' — нет)
   final int latencyMs; // пинг: задержка последней успешной проверки, мс (0 — нет данных)
   final double speedKBps; // скорость скачивания, КБ/с (0 — не замерялась)
+  final String udp; // замер UDP в текущей сети: good | unstable | none; '' — нет свежего замера (годен ли узел для звонков)
+  final int udpMs; // медиана задержки STUN-ответов, мс
 
   /// Скорость в Мбит/с.
   double get speedMbps => speedKBps * 8 / 1024;
 
   /// Строка для сравнения при обновлении списка: если ничего не изменилось, перерисовывать нечего.
-  String get signature => '$id|${l2At?.millisecondsSinceEpoch}|$favorite|$pinned|$own|$label|$youtube|$googleApi|${exit?.country}|${exit?.clean}|$latencyMs|${speedKBps.round()}';
+  String get signature => '$id|${l2At?.millisecondsSinceEpoch}|$favorite|$pinned|$own|$label|$youtube|$googleApi|${exit?.country}|${exit?.clean}|$latencyMs|${speedKBps.round()}|$udp';
 
   bool get alive => l2At != null;
   String get address => port > 0 ? '$server:$port' : server;
@@ -739,6 +743,8 @@ class NodeDto {
         exit: j['exit'] is Map<String, dynamic> ? ExitDto.fromJson(j['exit'] as Map<String, dynamic>) : null,
         latencyMs: (j['latency_ms'] as num?)?.toInt() ?? 0,
         speedKBps: (j['speed_kbps'] as num?)?.toDouble() ?? 0,
+        udp: (j['udp'] as String?) ?? '',
+        udpMs: (j['udp_ms'] as num?)?.toInt() ?? 0,
         own: j['own'] == true,
         label: (j['label'] as String?) ?? '',
       );
@@ -746,7 +752,7 @@ class NodeDto {
 
 /// Активный узел из `GET /v1/status`.
 class ActiveNode {
-  const ActiveNode({required this.proto, required this.server, required this.port, this.id = '', this.country = '', this.clean = '', this.latencyMs = 0, this.speedKBps = 0, this.ip = '', this.label = ''});
+  const ActiveNode({required this.proto, required this.server, required this.port, this.id = '', this.country = '', this.clean = '', this.latencyMs = 0, this.speedKBps = 0, this.udp = '', this.ip = '', this.label = ''});
 
   final String id;
   final String proto;
@@ -756,14 +762,15 @@ class ActiveNode {
   final String clean; // clean | mixed | dirty | unknown | ''
   final int latencyMs;
   final double speedKBps;
+  final String udp; // good | unstable | none | ''
   final String ip;
   final String label;
 
   @override
-  bool operator ==(Object other) => other is ActiveNode && other.id == id && other.proto == proto && other.server == server && other.port == port && other.country == country && other.clean == clean && other.latencyMs == latencyMs && other.speedKBps.round() == speedKBps.round() && other.ip == ip && other.label == label;
+  bool operator ==(Object other) => other is ActiveNode && other.id == id && other.proto == proto && other.server == server && other.port == port && other.country == country && other.clean == clean && other.latencyMs == latencyMs && other.speedKBps.round() == speedKBps.round() && other.udp == udp && other.ip == ip && other.label == label;
 
   @override
-  int get hashCode => Object.hash(id, proto, server, port, country, clean, latencyMs, speedKBps.round(), ip, label);
+  int get hashCode => Object.hash(id, proto, server, port, country, clean, latencyMs, speedKBps.round(), udp, ip, label);
 
   String get title => proto == 'warp' ? 'Cloudflare WARP' : (label.isNotEmpty ? label : (port > 0 ? '$proto · $server:$port' : '$proto · $server'));
 }
@@ -967,6 +974,7 @@ class DaemonStatus {
               label: (a['label'] as String?) ?? '',
               latencyMs: (a['latency_ms'] as num?)?.toInt() ?? 0,
               speedKBps: (a['speed_kbps'] as num?)?.toDouble() ?? 0,
+              udp: (a['udp'] as String?) ?? '',
             )
           : null,
     );
@@ -1082,6 +1090,9 @@ abstract class DaemonApi {
   Future<void> tgFavorite(String id, bool on);
   Future<ExitDto> exitInfo(String id);
   Future<double> measureSpeed(String id); // КБ/с
+
+  /// Замер UDP через узел (годен ли для звонков): оценка good | unstable | none и медиана задержки, мс.
+  Future<({String grade, int medianMs, int lossPct})> probeUdp(String id) async => throw ApiException(501, 'замер UDP не поддерживается этим ядром');
   Future<MeasureDto> startMeasure(List<String> ids, {bool ping = false, bool exit = false, bool speed = false});
   Future<MeasureDto> measureState();
   Future<NodeDto> connectBest();
@@ -1321,6 +1332,12 @@ class UnixApi implements DaemonApi {
   Future<double> measureSpeed(String id) async {
     final r = await _call('POST', '/v1/nodes/$id/speed', null, const Duration(seconds: 90));
     return (r['speed_kbps'] as num?)?.toDouble() ?? 0;
+  }
+
+  @override
+  Future<({String grade, int medianMs, int lossPct})> probeUdp(String id) async {
+    final r = await _call('POST', '/v1/nodes/$id/udp', null, const Duration(seconds: 40));
+    return (grade: (r['grade'] as String?) ?? 'none', medianMs: (r['median_ms'] as num?)?.toInt() ?? 0, lossPct: (r['loss_pct'] as num?)?.round() ?? 100);
   }
 
   @override

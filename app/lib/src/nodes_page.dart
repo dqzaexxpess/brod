@@ -441,6 +441,8 @@ class NodeTile extends StatelessWidget {
                 await model.shareNode(node);
               case 'speed':
                 await model.measureSpeed(node);
+              case 'calls':
+                await model.probeCalls(node);
               case 'exit':
                 await model.detectExit(node);
               case 'delete':
@@ -452,6 +454,7 @@ class NodeTile extends StatelessWidget {
             if (node.own) const PopupMenuItem(value: 'edit', child: ListTile(dense: true, leading: Icon(Icons.edit_outlined), title: Text('Изменить сервер'))),
             const PopupMenuItem(value: 'share', child: ListTile(dense: true, leading: Icon(Icons.share_outlined), title: Text('Поделиться ссылкой'))),
             const PopupMenuItem(value: 'speed', child: ListTile(dense: true, leading: Icon(Icons.speed), title: Text('Замерить скорость'))),
+            const PopupMenuItem(value: 'calls', child: ListTile(dense: true, leading: Icon(Icons.headset_mic_outlined), title: Text('Проверить для звонков'))),
             const PopupMenuItem(value: 'exit', child: ListTile(dense: true, leading: Icon(Icons.travel_explore), title: Text('Проверить страну и чистоту IP'))),
             if (node.own) const PopupMenuItem(value: 'delete', child: ListTile(dense: true, leading: Icon(Icons.delete_outline), title: Text('Удалить'))),
           ],

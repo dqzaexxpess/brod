@@ -477,7 +477,7 @@ func (a *app) list(args []string) error {
 		return nil
 	}
 	w := a.tw()
-	fmt.Fprintln(w, "ID\tПРОТОКОЛ\tАДРЕС\tСТРАНА\tЧИСТОТА\tПИНГ\tСКОРОСТЬ\tL2\tGOOGLE\tYT\tМЕТКИ")
+	fmt.Fprintln(w, "ID\tПРОТОКОЛ\tАДРЕС\tСТРАНА\tЧИСТОТА\tПИНГ\tСКОРОСТЬ\tЗВОНКИ\tL2\tGOOGLE\tYT\tМЕТКИ")
 	for _, n := range nodes {
 		var marks []string
 		if n["favorite"] == true {
@@ -514,7 +514,7 @@ func (a *app) list(args []string) error {
 		if v, ok := n["speed_kbps"].(float64); ok && v > 0 {
 			speed = fmt.Sprintf("%.1f Мбит/с", v*8/1024)
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s:%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", a.id(str(n, "id")), shownClass(str(n, "class")), str(n, "server"), str(n, "port"), country, clean, ping, speed, l2,
+		fmt.Fprintf(w, "%s\t%s\t%s:%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", a.id(str(n, "id")), shownClass(str(n, "class")), str(n, "server"), str(n, "port"), country, clean, ping, speed, callsLabel(str(n, "udp")), l2,
 			yn(n["google_api"]), yn(n["youtube"]), strings.Join(marks, " "))
 	}
 	return w.Flush()
@@ -1383,4 +1383,17 @@ func shownClass(c string) string {
 		}
 	}
 	return c
+}
+
+// callsLabel — метка «для звонков» по замеру UDP: хорошо / рвётся / нет UDP; без замера прочерк.
+func callsLabel(grade string) string {
+	switch grade {
+	case "good":
+		return "да"
+	case "unstable":
+		return "рвётся"
+	case "none":
+		return "нет UDP"
+	}
+	return "—"
 }

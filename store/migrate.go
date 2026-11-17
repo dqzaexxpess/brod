@@ -173,6 +173,16 @@ CREATE TABLE source_candidates (
 	// 9. отпечаток набора ссылок кандидата (bottom-k sketch: до 64 усечённых солёных хэшей по 8 байт, до 512 байт): по нему кандидаты-зеркала
 	// группируются. Только хэши; ссылок и секретов здесь нет. NULL — отпечатка ещё нет (кандидат до миграции, пока его не увидит проход).
 	`ALTER TABLE source_candidates ADD COLUMN sketch BLOB;`,
+	// последний замер UDP через узел (STUN): годен ли узел для звонков; привязан к сети: у другого провайдера UDP может резаться иначе
+	`
+CREATE TABLE node_udp (
+  node      TEXT PRIMARY KEY,
+  net       TEXT NOT NULL,
+  grade     TEXT NOT NULL,             -- good | unstable | none
+  loss_pct  REAL NOT NULL,
+  median_ms INTEGER NOT NULL,
+  at        INTEGER NOT NULL           -- unix-секунды
+);`,
 }
 
 func migrate(db *sql.DB) error {

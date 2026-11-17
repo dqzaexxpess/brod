@@ -16,7 +16,9 @@ func TestDiscordCallRulesReachTUNConfig(t *testing.T) {
 	}
 	m, _ := tunCfg(t, TUNConfig{Mode: ModeBlocked, UserRules: rules})
 	got := routeRules(m)
-	udpI := ruleIndex(got, func(r map[string]any) bool { return r["network"] == "udp" && r["port_range"] != nil && r["outbound"] == OutApp })
+	udpI := ruleIndex(got, func(r map[string]any) bool {
+		return r["network"] == "udp" && r["port_range"] != nil && r["outbound"] == OutApp
+	})
 	procI := ruleIndex(got, func(r map[string]any) bool { return r["process_name"] != nil && r["outbound"] == OutApp })
 	if udpI < 0 || procI < 0 {
 		t.Fatalf("правила Discord не попали в маршрут через выход: udp=%d proc=%d", udpI, procI)

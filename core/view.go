@@ -40,6 +40,9 @@ type NodeView struct {
 	LatencyMs  int64     // «пинг»: задержка последней успешной проверки L2 в текущей сети; 0 — нет данных
 	SpeedKBps  float64   // скорость скачивания через узел (замер ~2 МБ), КБ/с; 0 — не замерялась
 	SpeedAt    time.Time
+	UDP        string // good | unstable | none; пусто — нет свежего замера UDP в текущей сети («для звонков»)
+	UDPMs      int64  // медиана задержки STUN-ответов
+	UDPAt      time.Time
 }
 
 // NodesQuery — выборка для списка.
@@ -71,6 +74,7 @@ func (c *Core) Nodes(q NodesQuery) ([]NodeView, error) {
 	}
 	exits, _ := c.st.ExitInfos() // не критично: без них список просто без стран
 	speeds, _ := c.st.Speeds()
+	udps, _ := c.st.UDPs()
 	own, _ := c.st.OwnIDs()
 	labels, _ := c.st.NodeLabels()
 	out := make([]NodeView, 0, len(recs))
@@ -82,7 +86,7 @@ func (c *Core) Nodes(q NodesQuery) ([]NodeView, error) {
 		}
 		out = append(out, NodeView{NodeInfo: nodeInfo(r), L2At: h.L2OK, GoogleAPI: !h.GoogleOK.IsZero() && !h.GoogleOK.Before(h.L2OK.Add(-time.Hour)),
 			YouTube: !h.L4OK.IsZero(), LastFail: h.LastFail, FirstSeen: r.FirstSeen, LastSeen: r.LastSeen, NoSecurity: r.NoSecurity, Notes: r.Notes,
-			Exit: exitView(exits, r.ID, !h.L4OK.IsZero()), LatencyMs: h.L2Ms, SpeedKBps: speeds[r.ID].KBps, SpeedAt: speeds[r.ID].At, Own: own[r.ID], Label: labels[r.ID]})
+			Exit: exitView(exits, r.ID, !h.L4OK.IsZero()), LatencyMs: h.L2Ms, SpeedKBps: speeds[r.ID].KBps, SpeedAt: speeds[r.ID].At, Own: own[r.ID], Label: labels[r.ID]}.withUDP(c.udpFresh(udps[r.ID], now), udps[r.ID]))
 	}
 	rank := func(v NodeView) int {
 		sc := 0
@@ -185,6 +189,9 @@ func (c *Core) withExit(v NodeView) NodeView {
 	}
 	if m, err := c.st.Speeds(); err == nil {
 		v.SpeedKBps, v.SpeedAt = m[v.ID].KBps, m[v.ID].At
+	}
+	if m, err := c.st.UDPs(); err == nil {
+		v = v.withUDP(c.udpFresh(m[v.ID], c.cfg.Now()), m[v.ID])
 	}
 	if own, err := c.st.OwnIDs(); err == nil {
 		v.Own = own[v.ID]
@@ -751,4 +758,12 @@ func (c *Core) ActiveBrief() (proto, country string) {
 		return "", ""
 	}
 	return rec.Proto, c.st.ExitCountry(id)
+}
+
+// withUDP добавляет замер UDP, если он свежий и снят в текущей сети.
+func (v NodeView) withUDP(fresh bool, r store.UDPRec) NodeView {
+	if fresh {
+		v.UDP, v.UDPMs, v.UDPAt = r.Grade, r.MedianMs, r.At
+	}
+	return v
 }

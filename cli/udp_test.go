@@ -34,3 +34,11 @@ func TestShownClassUDPProtocols(t *testing.T) {
 		}
 	}
 }
+
+func TestCallsLabel(t *testing.T) {
+	for in, want := range map[string]string{"good": "да", "unstable": "рвётся", "none": "нет UDP", "": "—"} {
+		if got := callsLabel(in); got != want {
+			t.Errorf("%q: %q, ожидалось %q", in, got, want)
+		}
+	}
+}

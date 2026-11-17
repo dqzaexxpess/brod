@@ -173,6 +173,7 @@ func (c *Core) exitLoop(ctx context.Context) {
 		}
 		c.exitRound(ctx)
 		c.speedRound(ctx)
+		c.udpRound(ctx)
 		if ctx.Err() == nil {
 			c.markLoopRun("exit")
 		}

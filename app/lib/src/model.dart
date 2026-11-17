@@ -1372,6 +1372,29 @@ class AppModel extends ChangeNotifier {
     }
   }
 
+  /// Проверить, годен ли узел для звонков: замер UDP через него (около 4 с).
+  Future<void> probeCalls(NodeDto n) async {
+    nodeBusy = n.id;
+    toast = null;
+    _notify();
+    try {
+      final r = await api.probeUdp(n.id);
+      toast = switch (r.grade) {
+        'good' => 'Для звонков годится: ${n.title}, ${r.medianMs} мс',
+        'unstable' => 'Звонки будут рваться: ${n.title}, потери ${r.lossPct}%, ${r.medianMs} мс',
+        _ => 'UDP через ${n.title} не проходит: для звонков не подойдёт',
+      };
+      await loadNodes();
+    } on ApiException catch (e) {
+      _fail(e.message);
+    } catch (e) {
+      _fail('$e');
+    } finally {
+      nodeBusy = null;
+      _notify();
+    }
+  }
+
   /// Определить страну и чистоту выхода узла сейчас.
   Future<void> detectExit(NodeDto n) async {
     nodeBusy = n.id;
