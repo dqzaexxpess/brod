@@ -88,11 +88,11 @@ class _UpdateDialogState extends State<UpdateDialog> {
             child: SingleChildScrollView(
               child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(u == null ? 'Загрузка…' : 'Установлена версия ${u.current}${u.platform.isEmpty ? '' : ' (${u.platform})'}'),
-                if (u?.last != null)
+                if (u?.last != null && showLastInstall(u!))
                   Padding(
                     padding: const EdgeInsets.only(top: 6),
                     child: Text(
-                      u!.last!.ok ? 'Последняя установка: ${u.last!.from} → ${u.last!.to} выполнена.' : 'Последняя установка ${u.last!.from} → ${u.last!.to} не удалась: ${u.last!.error}',
+                      u.last!.ok ? 'Последняя установка: ${u.last!.from} → ${u.last!.to} выполнена.' : 'Последняя установка ${u.last!.from} → ${u.last!.to} не удалась: ${installErrorText(u.last!.error)}',
                       style: TextStyle(color: u.last!.ok ? cs.primary : cs.error),
                     ),
                   ),
@@ -163,7 +163,8 @@ class _UpdateDialogState extends State<UpdateDialog> {
             ),
           ),
           actions: [
-            TextButton(onPressed: m.updateBusy ? null : m.checkUpdate, child: const Text('Проверить сейчас')),
+            // во время скачивания и установки повторная проверка ничего не прерывает, поэтому кнопки нет
+            if (!dl.downloading && u?.installing != true) TextButton(onPressed: m.updateBusy ? null : m.checkUpdate, child: const Text('Проверить сейчас')),
             TextButton(onPressed: () => Navigator.pop(context), child: const Text('Закрыть')),
           ],
         );
@@ -196,4 +197,27 @@ class UpdateBanner extends StatelessWidget {
       ),
     );
   }
+}
+
+
+/// Текст ошибки установки без шума: pkexec дописывает «This incident has been reported.» (это запись в локальный журнал системы, никуда не
+/// отправляется), а отказ polkit по-английски заменяется понятной причиной.
+String installErrorText(String raw) {
+  if (raw.contains('Not authorized')) {
+    return 'система не выдала права администратора (polkit: Not authorized); нужен графический polkit-агент в сеансе, запустите установку из приложения';
+  }
+  final lines = [
+    for (final l in raw.split('\n'))
+      if (l.trim().isNotEmpty && !l.trim().toLowerCase().startsWith('this incident has been reported')) l.trim(),
+  ];
+  return lines.join(' ');
+}
+
+/// Итог прошлой установки показывается, пока он относится к тому же, что предлагается сейчас: неудача установки другой версии (например,
+/// 0.3.1) при доступной 0.4.0 только пугает. Успех и неудача без новой версии остаются видны.
+bool showLastInstall(UpdateDto u) {
+  final l = u.last;
+  if (l == null) return false;
+  if (l.ok || !u.available) return true;
+  return l.to == u.app;
 }

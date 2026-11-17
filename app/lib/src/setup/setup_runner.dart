@@ -36,6 +36,7 @@ List<String> transcriptLines(String raw) {
     }
     if (inBlock || t.isEmpty) continue;
     if (t.startsWith('PS>') || t.startsWith('+ ') || RegExp(r'^[A-Za-z]:\\.*\.ps1:\d+').hasMatch(t) || RegExp(r'^(CategoryInfo|FullyQualifiedErrorId)\b').hasMatch(t)) continue;
+    if (t == 'True' || t == 'False') continue; // случайный вывод логического значения командой скрипта, пользователю он ничего не говорит
     if (out.isNotEmpty && out.last == t) continue;
     out.add(t);
   }
@@ -45,12 +46,15 @@ List<String> transcriptLines(String raw) {
 /// Одна фраза для страницы ошибки: сообщение после «УСТАНОВКА НЕ ЗАВЕРШЕНА:» (его печатает install.ps1), иначе последняя строка протокола.
 String failureSummary(List<String> lines) {
   const marker = 'УСТАНОВКА НЕ ЗАВЕРШЕНА:';
-  for (final l in lines.reversed) {
-    final i = l.indexOf(marker);
-    if (i >= 0) {
-      final t = l.substring(i + marker.length).trim();
-      return t.isEmpty ? t : t[0].toUpperCase() + t.substring(1);
+  for (var i = lines.length - 1; i >= 0; i--) {
+    final j = lines[i].indexOf(marker);
+    if (j < 0) continue;
+    // консоль PowerShell переносит длинную строку на ширине окна посреди слова: продолжение (оно начинается со строчной буквы) приклеивается
+    var t = lines[i].substring(j + marker.length).trim();
+    for (var k = i + 1; k < lines.length && RegExp(r'^[а-яa-z(]').hasMatch(lines[k]); k++) {
+      t += lines[k];
     }
+    return t.isEmpty ? t : t[0].toUpperCase() + t.substring(1);
   }
   return lines.isEmpty ? '' : lines.last;
 }

@@ -34,6 +34,24 @@ func rig(t *testing.T) (root, target, stage string) {
 	return
 }
 
+// withHelper подключает подставного помощника: он «ставит» brodd в каталог root-демона (файл с содержимым new) и запоминает вызов.
+func withHelper(a *LinuxApply, root string, called *bool) *LinuxApply {
+	daemon := filepath.Join(root, "lib", "brodd")
+	a.Archive, a.Manifest, a.Sig = "/a", "/m", "/s"
+	a.HelperInstalled = func() bool { return true }
+	a.DaemonPath = daemon
+	a.Helper = func(string, string, string) error {
+		if called != nil {
+			*called = true
+		}
+		if err := os.MkdirAll(filepath.Dir(daemon), 0o755); err != nil {
+			return err
+		}
+		return os.WriteFile(daemon, []byte("new"), 0o755)
+	}
+	return a
+}
+
 func read(t *testing.T, p string) string {
 	t.Helper()
 	b, err := os.ReadFile(p)
@@ -47,11 +65,10 @@ func TestLinuxApplyReplacesAndKeepsPrev(t *testing.T) {
 	skipNonLinux(t)
 	root, target, stage := rig(t)
 	res := filepath.Join(root, "last.json")
-	var capsFor, started string
-	a := &LinuxApply{Stage: stage, Target: target, From: "0.3.0", To: "0.4.0", Result: res, Relaunch: true,
-		NeedCaps: func(f string) bool { return strings.HasSuffix(f, "brod/brodd") },
-		Setcap:   func(f string) error { capsFor = f; return nil },
-		Start:    func(exe string) error { started = exe; return nil }}
+	var started string
+	helperCalled := false
+	a := withHelper(&LinuxApply{Stage: stage, Target: target, From: "0.3.0", To: "0.4.0", Result: res, Relaunch: true,
+		Start: func(exe string) error { started = exe; return nil }}, root, &helperCalled)
 	if err := a.Run(); err != nil {
 		t.Fatal(err)
 	}
@@ -61,8 +78,8 @@ func TestLinuxApplyReplacesAndKeepsPrev(t *testing.T) {
 	if got := read(t, filepath.Join(target+".prev", "brodd")); got != "old" {
 		t.Fatalf("prev: %q", got)
 	}
-	if capsFor != filepath.Join(stage, "brodd") {
-		t.Fatalf("права выданы файлу %q (до замены, в stage)", capsFor)
+	if !helperCalled {
+		t.Fatal("демон должен ставить помощник до замены каталога")
 	}
 	if started != filepath.Join(target, "brod") {
 		t.Fatalf("запуск: %q", started)
@@ -88,8 +105,8 @@ func TestLinuxApplyAbortsBeforeChangingAnything(t *testing.T) {
 	root, target, stage := rig(t)
 	res := filepath.Join(root, "last.json")
 	// отказ в пароле
-	a := &LinuxApply{Stage: stage, Target: target, From: "0.3.0", To: "0.4.0", Result: res,
-		NeedCaps: func(string) bool { return true }, Setcap: func(string) error { return errors.New("отказано") }}
+	a := withHelper(&LinuxApply{Stage: stage, Target: target, From: "0.3.0", To: "0.4.0", Result: res}, root, nil)
+	a.Helper = func(string, string, string) error { return errors.New("отказано") }
 	err := a.Run()
 	if err == nil || !strings.Contains(err.Error(), "установка не начата") {
 		t.Fatalf("ошибка: %v", err)
@@ -105,22 +122,24 @@ func TestLinuxApplyAbortsBeforeChangingAnything(t *testing.T) {
 	}
 	writeRelease(t, stage, "0.4.0", "new") // дальше те же проверки на заново подготовленном релизе
 	// процесс не завершился
-	a2 := &LinuxApply{Stage: stage, Target: target, To: "0.4.0", WaitPIDs: []int{os.Getpid()}, WaitTimeout: 300 * time.Millisecond, NeedCaps: func(string) bool { return false }}
+	a2 := &LinuxApply{Stage: stage, Target: target, To: "0.4.0", WaitPIDs: []int{os.Getpid()}, WaitTimeout: 300 * time.Millisecond}
 	if err := a2.Run(); err == nil || !strings.Contains(err.Error(), "не завершился") {
 		t.Fatalf("ожидание: %v", err)
 	}
 	// stage другой версии
 	writeRelease(t, stage, "0.4.0", "new")
-	a3 := &LinuxApply{Stage: stage, Target: target, To: "0.9.9", NeedCaps: func(string) bool { return false }}
+	a3 := &LinuxApply{Stage: stage, Target: target, To: "0.9.9"}
 	if err := a3.Run(); err == nil {
 		t.Fatal("релиз другой версии принят")
 	}
-	// права прежнему brodd не нужны (TUN не настраивали): setcap не зовётся
+	// помощник не поставлен: установка не начинается и подсказывает, как его поставить (прежнего обходного пути нет)
 	writeRelease(t, stage, "0.4.0", "new")
-	called := false
-	a4 := &LinuxApply{Stage: stage, Target: target, To: "0.4.0", NeedCaps: func(string) bool { return false }, Setcap: func(string) error { called = true; return nil }}
-	if err := a4.Run(); err != nil || called {
-		t.Fatalf("без прав: %v, setcap=%v", err, called)
+	a4 := &LinuxApply{Stage: stage, Target: target, To: "0.4.0", Archive: "/a", Manifest: "/m", Sig: "/s", HelperInstalled: func() bool { return false }}
+	if err := a4.Run(); err == nil || !strings.Contains(err.Error(), "brod-helper не установлен") || !strings.Contains(err.Error(), "install.sh") {
+		t.Fatalf("без помощника: %v", err)
+	}
+	if read(t, filepath.Join(target, "brodd")) != "old" {
+		t.Fatal("без помощника прежняя версия изменена")
 	}
 }
 
@@ -142,9 +161,9 @@ func TestLinuxApplyRelaunchesOldVersionAfterRefusal(t *testing.T) {
 	skipNonLinux(t)
 	root, target, stage := rig(t)
 	var started []string
-	a := &LinuxApply{Stage: stage, Target: target, From: "0.3.0", To: "0.4.0", Result: filepath.Join(root, "last.json"), Relaunch: true,
-		NeedCaps: func(string) bool { return true }, Setcap: func(string) error { return errors.New("отказано") },
-		Start: func(exe string) error { started = append(started, exe); return nil }}
+	a := withHelper(&LinuxApply{Stage: stage, Target: target, From: "0.3.0", To: "0.4.0", Result: filepath.Join(root, "last.json"), Relaunch: true,
+		Start: func(exe string) error { started = append(started, exe); return nil }}, root, nil)
+	a.Helper = func(string, string, string) error { return errors.New("отказано") }
 	if err := a.Run(); err == nil {
 		t.Fatal("ожидалась ошибка")
 	}
@@ -161,7 +180,7 @@ func TestLinuxApplyRelaunchesOldVersionAfterRefusal(t *testing.T) {
 	writeRelease(t, stage, "0.4.0", "new")
 	started = nil
 	a2 := &LinuxApply{Stage: stage, Target: target, To: "0.4.0", Relaunch: true, WaitPIDs: []int{os.Getpid()}, WaitTimeout: 200 * time.Millisecond,
-		NeedCaps: func(string) bool { return false }, Start: func(exe string) error { started = append(started, exe); return nil }}
+		Start: func(exe string) error { started = append(started, exe); return nil }}
 	if err := a2.Run(); err == nil {
 		t.Fatal("ожидалась ошибка ожидания")
 	}

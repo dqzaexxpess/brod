@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -46,7 +47,13 @@ Future<void> _spawnCleanup(String dir) async {
       "try { Remove-Item -Recurse -Force -LiteralPath '$path' -ErrorAction Stop } catch { L ('ошибка: ' + \$_.Exception.Message) }; "
       "if (-not (Test-Path -LiteralPath '$path')) { Remove-Item -LiteralPath \$log -Force -ErrorAction SilentlyContinue; break }; "
       "Start-Sleep 1 }";
-  await Process.start('powershell.exe', ['-NoProfile', '-WindowStyle', 'Hidden', '-Command', script], workingDirectory: home, mode: ProcessStartMode.detached);
+  // Запуск через `cmd /c start`, как у перезапуска приложения после обновления (model.dart): PowerShell, запущенный напрямую в режиме
+  // detached (DETACHED_PROCESS, без консоли), завершается сразу и ничего не выполняет — помощник не стартовал, журнала не было
+  // (проверено на Windows 11 отдельным повтором: detached и detachedWithStdio — скрипт не выполняется, normal — умирает вместе
+  // с родителем, через start — копия стёрта). Скрипт — в -EncodedCommand, чтобы cmd не разбирал спецсимволы пути.
+  final utf16 = <int>[for (final u in script.codeUnits) ...[u & 0xff, u >> 8]];
+  await Process.start('cmd.exe', ['/c', 'start', '""', '/min', 'powershell.exe', '-NoProfile', '-WindowStyle', 'Hidden', '-EncodedCommand', base64.encode(utf16)],
+      workingDirectory: home, mode: ProcessStartMode.detached);
   try {
     await Process.run('reg', ['add', r'HKCU\Software\Microsoft\Windows\CurrentVersion\RunOnce', '/v', 'BrodCleanup', '/t', 'REG_SZ', '/d', 'cmd /c rd /s /q "$dir"', '/f']);
   } on ProcessException {

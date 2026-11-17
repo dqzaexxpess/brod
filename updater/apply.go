@@ -29,9 +29,7 @@ type LinuxApply struct {
 	HelperInstalled func() bool                               // поставлен ли помощник; nil — проверка HelperPath и DaemonDir
 	Helper          func(archive, manifest, sig string) error // nil — pkexec HelperPath install …
 	DaemonPath      string                                    // куда помощник ставит brodd; "" — DaemonDir/brodd
-	Setcap          func(file string) error                   // переходный режим: выдать brodd права для TUN (нужен root); nil — по умолчанию pkexec
 	Start           func(exe string) error                    // запуск приложения; nil — по умолчанию отсоединённый процесс
-	NeedCaps        func(file string) bool                    // были ли права у прежнего brodd; nil — смотреть xattr
 	Log             func(format string, a ...any)
 }
 
@@ -40,13 +38,6 @@ const (
 	HelperPath = "/usr/local/libexec/brod/brod-helper"
 	DaemonDir  = "/usr/local/lib/brod"
 )
-
-// TransitionWarning — запись в журнал установки и в итог (Result.Warning), пока помощник не поставлен.
-// ПЕРЕХОДНЫЙ РЕЖИМ: убрать вместе с pkexecSetcap и полем Setcap, когда помощник поставлен на всех Linux-машинах,
-// и в любом случае до первого публичного релиза.
-const TransitionWarning = "переходный режим: помощник brod-helper не установлен, права для TUN выданы прежним способом " +
-	"(pkexec setcap на файл в каталоге пользователя: окно подмены файла не закрыто). Поставьте помощник: sudo deploy/install-helper.sh. " +
-	"Прежний способ временный и будет удалён до первого публичного релиза"
 
 // detectHelper — проверка по умолчанию; тесты пакета подменяют её, чтобы не зависеть от того, поставлен ли помощник на машине.
 var detectHelper = helperInstalled
@@ -62,9 +53,8 @@ func (a *LinuxApply) logf(f string, v ...any) {
 // начиналась, прежняя версия на месте.
 func (a *LinuxApply) Run() (err error) {
 	waited, swapped := false, false // программы закрыты / каталоги уже заменены
-	warning := ""
 	defer func() {
-		r := Result{At: time.Now().UTC(), From: a.From, To: a.To, OK: err == nil, Warning: warning}
+		r := Result{At: time.Now().UTC(), From: a.From, To: a.To, OK: err == nil}
 		if err != nil {
 			r.Error = err.Error()
 			_ = os.RemoveAll(a.Stage) // подготовленный релиз (десятки МБ) после неудачи не нужен: следующая попытка распакует заново
@@ -104,22 +94,8 @@ func (a *LinuxApply) Run() (err error) {
 			return err
 		}
 	} else {
-		warning = TransitionWarning
-		a.logf("ВНИМАНИЕ: %s", warning)
-		need := a.NeedCaps
-		if need == nil {
-			need = hasCaps
-		}
-		if need(filepath.Join(a.Target, "brodd")) {
-			set := a.Setcap
-			if set == nil {
-				set = pkexecSetcap
-			}
-			a.logf("права для режима TUN на новый brodd")
-			if err := set(filepath.Join(a.Stage, "brodd")); err != nil {
-				return fmt.Errorf("права для режима TUN не выданы, установка не начата (прежняя версия на месте): %w", err)
-			}
-		}
+		return errors.New("помощник обновлений brod-helper не установлен: установка не начата (прежняя версия на месте). " +
+			"Поставьте его: ./install.sh из архива выпуска (системный шаг) или sudo deploy/install-helper.sh")
 	}
 	a.logf("замена каталога %s", a.Target)
 	if err := SwapDir(a.Stage, a.Target); err != nil {
@@ -193,31 +169,6 @@ func pkexecHelper(archive, manifest, sig string) error {
 	out, err := exec.Command(pk, HelperPath, "install", archive, manifest, sig).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%s: %v: %s", HelperPath, err, strings.TrimSpace(string(out)))
-	}
-	return nil
-}
-
-// pkexecSetcap — ПЕРЕХОДНЫЙ РЕЖИМ (см. TransitionWarning): права файлу в каталоге пользователя.
-func pkexecSetcap(file string) error {
-	pk, err := exec.LookPath("pkexec")
-	if err != nil {
-		return errors.New("нет pkexec: выполните вручную `sudo setcap cap_net_admin,cap_net_bind_service,cap_net_raw+ep " + file + "`")
-	}
-	sc, err := exec.LookPath("setcap")
-	if err != nil {
-		for _, p := range []string{"/usr/sbin/setcap", "/sbin/setcap"} {
-			if _, e := os.Stat(p); e == nil {
-				sc, err = p, nil
-				break
-			}
-		}
-		if err != nil {
-			return errors.New("нет setcap (пакет libcap2-bin)")
-		}
-	}
-	out, err := exec.Command(pk, sc, "cap_net_admin,cap_net_bind_service,cap_net_raw+ep", file).CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("pkexec setcap: %v: %s", err, strings.TrimSpace(string(out)))
 	}
 	return nil
 }

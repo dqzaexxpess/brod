@@ -37,11 +37,8 @@ func (a *app) printUpdate(u map[string]any) {
 	if l, ok := u["last"].(map[string]any); ok {
 		if l["ok"] == true {
 			fmt.Fprintf(a.env.Out, "последняя установка: %s → %s, успешно (%s)\n", str(l, "from"), str(l, "to"), ago(str(l, "at")))
-			if w := str(l, "warning"); w != "" {
-				fmt.Fprintf(a.env.Out, "ВНИМАНИЕ: %s\n", w)
-			}
 		} else {
-			fmt.Fprintf(a.env.Out, "последняя установка: %s → %s НЕ удалась (%s): %s\n", str(l, "from"), str(l, "to"), ago(str(l, "at")), str(l, "error"))
+			fmt.Fprintf(a.env.Out, "последняя установка: %s → %s НЕ удалась (%s): %s\n", str(l, "from"), str(l, "to"), ago(str(l, "at")), cleanInstallError(str(l, "error")))
 		}
 	}
 	d, _ := u["download"].(map[string]any)
@@ -117,4 +114,17 @@ func (a *app) update(args []string) error {
 		return fmt.Errorf("скачивание не удалось: %s", str(d, "error"))
 	}
 	return nil
+}
+
+// cleanInstallError убирает из текста ошибки установки строку pkexec «This incident has been reported.» (это запись в локальный журнал
+// системы, никуда не отправляется) и пустые строки.
+func cleanInstallError(raw string) string {
+	var out []string
+	for _, l := range strings.Split(raw, "\n") {
+		l = strings.TrimSpace(l)
+		if l != "" && !strings.HasPrefix(strings.ToLower(l), "this incident has been reported") {
+			out = append(out, l)
+		}
+	}
+	return strings.Join(out, " ")
 }

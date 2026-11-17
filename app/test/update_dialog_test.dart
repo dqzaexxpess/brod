@@ -62,6 +62,27 @@ Future<void> _open(WidgetTester tester, AppModel m) async {
 }
 
 void main() {
+  installNoiseTests();
+  testWidgets('во время скачивания и установки кнопки «Проверить сейчас» нет', (tester) async {
+    final api = _UpdApi();
+    api.state = UpdateDto(
+        current: '0.3.0',
+        platform: 'linux-amd64',
+        checked: DateTime(2026, 11, 10),
+        available: true,
+        app: '0.4.0',
+        size: 91 << 20,
+        download: const UpdateDownloadDto(state: 'downloading', bytes: 10 << 20, total: 91 << 20));
+    final m = AppModel(api, pollEvery: const Duration(hours: 1));
+    await _open(tester, m);
+    expect(find.text('Проверить сейчас'), findsNothing);
+    expect(find.text('Закрыть'), findsOneWidget);
+    api.state = UpdateDto(current: '0.3.0', platform: 'linux-amd64', available: true, app: '0.4.0', installing: true, download: api.afterDownload.download);
+    await m.loadUpdate();
+    await tester.pumpAndSettle();
+    expect(find.text('Проверить сейчас'), findsNothing);
+  });
+
   test('данные: обновление и краткая сводка в статусе', () {
     final u = UpdateDto.fromJson({
       'current': '0.3.0',
@@ -260,5 +281,22 @@ void main() {
     await tester.pumpWidget(host());
     expect(find.textContaining('скачана и проверена'), findsOneWidget);
     m.dispose();
+  });
+}
+
+void installNoiseTests() {
+  test('текст ошибки установки без «This incident has been reported»', () {
+    expect(installErrorText('pkexec setcap: exit status 127: Error executing command as another user: Not authorized\n\nThis incident has been reported.'), contains('polkit'));
+    expect(installErrorText('диск полон\nThis incident has been reported.\n'), 'диск полон');
+    expect(installErrorText('нет места'), 'нет места');
+  });
+
+  test('неудача установки другой версии скрыта, когда доступна новая', () {
+    const failed = UpdateResultDto(ok: false, from: '0.3.0', to: '0.3.1', error: 'x');
+    expect(showLastInstall(const UpdateDto(available: true, app: '0.4.0', last: failed)), isFalse);
+    expect(showLastInstall(const UpdateDto(available: true, app: '0.3.1', last: failed)), isTrue, reason: 'та же версия: причина нужна');
+    expect(showLastInstall(const UpdateDto(available: false, last: failed)), isTrue);
+    expect(showLastInstall(const UpdateDto(available: true, app: '0.4.0', last: UpdateResultDto(ok: true, from: '0.2.0', to: '0.3.0'))), isTrue);
+    expect(showLastInstall(const UpdateDto()), isFalse);
   });
 }

@@ -53,6 +53,17 @@ Future<void> _open(WidgetTester tester, Widget page) async {
 }
 
 void main() {
+  testWidgets('источники: обновление подписок с вкладки «Узлы» не показывает здесь полоску загрузки', (tester) async {
+    final m = AppModel(_Api(), pollEvery: const Duration(hours: 1));
+    await _open(tester, SourcesPage(model: m));
+    m.nodesLoading = true; // идёт обновление подписок, запущенное не отсюда
+    // ignore: invalid_use_of_protected_member
+    m.notifyListeners();
+    await tester.pump();
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+    expect(tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.refresh)).onPressed, isNull, reason: 'второе обновление поверх идущего не запускается');
+  });
+
   testWidgets('источники: пустой список показывает «Источников нет»', (tester) async {
     final m = AppModel(_Api(), pollEvery: const Duration(hours: 1));
     await _open(tester, SourcesPage(model: m));

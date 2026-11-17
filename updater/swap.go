@@ -51,8 +51,6 @@ type Result struct {
 	To    string    `json:"to"`
 	OK    bool      `json:"ok"`
 	Error string    `json:"error,omitempty"`
-	// Warning — установка прошла, но есть то, что нужно исправить (помощник не поставлен, права выданы прежним способом).
-	Warning string `json:"warning,omitempty"`
 }
 
 // WriteResult записывает итог (временный файл и переименование).

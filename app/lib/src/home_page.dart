@@ -10,6 +10,7 @@ import 'platform_text.dart';
 import 'tray.dart';
 import 'update_dialog.dart';
 import 'widgets.dart';
+import 'win_version.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key, required this.model, this.onPickNode});
@@ -93,6 +94,10 @@ class HomePage extends StatelessWidget {
           const SizedBox(height: 16),
           _Banner(text: 'Работает другой VPN (${vpn.conflict.join(', ')}). Выключите его, иначе Brod не включится.'),
         ],
+      if (Platform.isWindows && oldWindowsWarning(Platform.operatingSystemVersion) != null) ...[
+        const SizedBox(height: 16),
+        _OldWindowsNote(text: oldWindowsWarning(Platform.operatingSystemVersion)!),
+      ],
       if (Platform.isAndroid) ...[const _BatteryNote()],
       if (model.status?.update != null) ...[const SizedBox(height: 16), UpdateBanner(model: model)],
       if (!on && model.status?.netMode == 'whitelist') ...[const SizedBox(height: 16), const _WhitelistNote()],
@@ -106,7 +111,7 @@ class HomePage extends StatelessWidget {
             ? const SizedBox.shrink()
             : active == null
                 ? _NoNodeCard(key: const ValueKey('none'), model: model, onPickNode: onPickNode)
-                : _NodeCard(key: ValueKey(active.id), model: model, node: active, onPickNode: onPickNode),
+                : _NodeCard(key: ValueKey(active.id), model: model, node: active),
       ),
       const SizedBox(height: 8),
       _FooterRow(model: model),
@@ -245,6 +250,38 @@ class _Banner extends StatelessWidget {
 
 /// Android в фоне (экран выключен, телефон лежит) закрывает приложению сеть, если оно не исключено из оптимизации батареи: проверки узлов,
 /// WARP и подбор профиля тогда молча не работают (в журнале `sendmsg: operation not permitted`). Пока исключения нет, на главной плашка.
+/// Сведение о старой Windows: закрывается до следующего запуска приложения (постоянно не прячется: сбой реален, пока система старая).
+class _OldWindowsNote extends StatefulWidget {
+  const _OldWindowsNote({required this.text});
+
+  final String text;
+
+  @override
+  State<_OldWindowsNote> createState() => _OldWindowsNoteState();
+}
+
+class _OldWindowsNoteState extends State<_OldWindowsNote> {
+  static bool _hidden = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (_hidden) return const SizedBox.shrink();
+    final cs = Theme.of(context).colorScheme;
+    return Card.filled(
+      color: cs.surfaceContainerHigh,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Icon(Icons.info_outline, color: cs.primary),
+          const SizedBox(width: 10),
+          Expanded(child: Padding(padding: const EdgeInsets.only(top: 2), child: Text(widget.text, style: Theme.of(context).textTheme.bodySmall))),
+          IconButton(tooltip: 'Скрыть', icon: const Icon(Icons.close, size: 18), onPressed: () => setState(() => _hidden = true)),
+        ]),
+      ),
+    );
+  }
+}
+
 class _BatteryNote extends StatefulWidget {
   const _BatteryNote();
 
@@ -372,11 +409,10 @@ class _NoNodeCard extends StatelessWidget {
 
 /// Карточка активного узла: флаг, название, пинг/скорость/чистота, действия.
 class _NodeCard extends StatelessWidget {
-  const _NodeCard({super.key, required this.model, required this.node, this.onPickNode});
+  const _NodeCard({super.key, required this.model, required this.node});
 
   final AppModel model;
   final ActiveNode node;
-  final VoidCallback? onPickNode;
 
   @override
   Widget build(BuildContext context) {
@@ -424,19 +460,31 @@ class _NodeCard extends StatelessWidget {
                 switch (k) {
                   case 'probe':
                     model.checkExit();
+                  case 'ping':
+                    model.startMeasure(ping: true, ids: [dto.id]);
+                  case 'speed':
+                    model.measureSpeed(dto);
+                  case 'calls':
+                    model.probeCalls(dto);
+                  case 'exit':
+                    model.detectExit(dto);
                   case 'share':
                     model.shareNode(dto);
                   case 'best':
                     model.connectBest();
-                  case 'pick':
-                    onPickNode?.call();
                 }
               },
               itemBuilder: (_) => [
                 const PopupMenuItem(value: 'probe', child: ListTile(dense: true, leading: Icon(Icons.network_check), title: Text('Проверить выход'))),
+                // те же проверки, что в меню узла на вкладке «Узлы», — для активного узла без перехода туда (у WARP узла в базе нет)
+                if (!warp) ...const [
+                  PopupMenuItem(value: 'ping', child: ListTile(dense: true, leading: Icon(Icons.network_ping), title: Text('Проверить пинг'))),
+                  PopupMenuItem(value: 'speed', child: ListTile(dense: true, leading: Icon(Icons.speed), title: Text('Замерить скорость'))),
+                  PopupMenuItem(value: 'calls', child: ListTile(dense: true, leading: Icon(Icons.headset_mic_outlined), title: Text('Проверить для звонков'))),
+                  PopupMenuItem(value: 'exit', child: ListTile(dense: true, leading: Icon(Icons.travel_explore), title: Text('Проверить страну и чистоту IP'))),
+                ],
                 if (!warp) const PopupMenuItem(value: 'share', child: ListTile(dense: true, leading: Icon(Icons.share_outlined), title: Text('Поделиться ссылкой'))),
                 const PopupMenuItem(value: 'best', child: ListTile(dense: true, leading: Icon(Icons.auto_awesome), title: Text('Подключиться к лучшему узлу'))),
-                const PopupMenuItem(value: 'pick', child: ListTile(dense: true, leading: Icon(Icons.dns_outlined), title: Text('Выбрать другой узел…'))),
               ],
             ),
           ]),

@@ -46,6 +46,9 @@ jobs:
           sudo apt-get install -y --no-install-recommends nftables
           sudo -E env "PATH=$PATH" BROD_REQUIRE_NFT=1 go test -count=1 -run 'PassesNftCheck|RejectsBrokenRuleset' ./killswitch
 
+      - name: Установка Linux из архива (на заглушках)
+        run: scripts/test-archive-install.sh
+
       - name: Скрипты Windows (синтаксис)
         run: scripts/check-ps1.sh
 

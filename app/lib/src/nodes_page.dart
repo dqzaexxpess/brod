@@ -439,6 +439,8 @@ class NodeTile extends StatelessWidget {
                 await editOwnDialog(context, model, node);
               case 'share':
                 await model.shareNode(node);
+              case 'ping':
+                await model.startMeasure(ping: true, ids: [node.id]);
               case 'speed':
                 await model.measureSpeed(node);
               case 'calls':
@@ -453,6 +455,7 @@ class NodeTile extends StatelessWidget {
             const PopupMenuItem(value: 'rename', child: ListTile(dense: true, leading: Icon(Icons.drive_file_rename_outline), title: Text('Переименовать'))),
             if (node.own) const PopupMenuItem(value: 'edit', child: ListTile(dense: true, leading: Icon(Icons.edit_outlined), title: Text('Изменить сервер'))),
             const PopupMenuItem(value: 'share', child: ListTile(dense: true, leading: Icon(Icons.share_outlined), title: Text('Поделиться ссылкой'))),
+            const PopupMenuItem(value: 'ping', child: ListTile(dense: true, leading: Icon(Icons.network_ping), title: Text('Проверить пинг'))),
             const PopupMenuItem(value: 'speed', child: ListTile(dense: true, leading: Icon(Icons.speed), title: Text('Замерить скорость'))),
             const PopupMenuItem(value: 'calls', child: ListTile(dense: true, leading: Icon(Icons.headset_mic_outlined), title: Text('Проверить для звонков'))),
             const PopupMenuItem(value: 'exit', child: ListTile(dense: true, leading: Icon(Icons.travel_explore), title: Text('Проверить страну и чистоту IP'))),

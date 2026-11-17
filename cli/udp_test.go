@@ -42,3 +42,12 @@ func TestCallsLabel(t *testing.T) {
 		}
 	}
 }
+
+func TestCleanInstallError(t *testing.T) {
+	if got := cleanInstallError("pkexec: Not authorized\n\nThis incident has been reported.\n"); got != "pkexec: Not authorized" {
+		t.Fatalf("%q", got)
+	}
+	if got := cleanInstallError("нет места"); got != "нет места" {
+		t.Fatalf("%q", got)
+	}
+}

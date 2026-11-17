@@ -23,6 +23,20 @@ param([string]$Dir = (Join-Path $env:ProgramFiles 'Brod'), [string]$User = '', [
 $ErrorActionPreference = 'Stop'
 # -Log <файл> — протокол вывода (его читает установщик с оформлением Brod: строки показываются на странице хода установки)
 if ($Log) { try { Start-Transcript -Path $Log -Force | Out-Null } catch {} }
+# Вывод, перехваченный в файл (updates\apply.log при установке обновления службой), — в UTF-8, а не в OEM-кодировке консоли
+if ([Console]::IsOutputRedirected) { try { [Console]::OutputEncoding = New-Object Text.UTF8Encoding($false) } catch {} }
+# SID пользователя приложения: при обычной установке — из -User, при -Update (служба от LocalSystem) — из разрешения на каталог состояния
+function Get-AppUserSid {
+    if ($userSid) { return $userSid }
+    try {
+        foreach ($a in (Get-Acl -LiteralPath (Join-Path $env:ProgramData 'Brod')).Access) {
+            if ($a.AccessControlType -ne 'Allow') { continue }
+            $sid = $a.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value
+            if ($sid -notin 'S-1-5-18', 'S-1-5-32-544') { return $sid }
+        }
+    } catch {}
+    return $null
+}
 function Write-Result($ok, $err) {
     if (-not $Result) { return }
     $r = [ordered]@{ at = (Get-Date).ToUniversalTime().ToString('o'); from = $From; to = $To; ok = $ok }
@@ -30,6 +44,11 @@ function Write-Result($ok, $err) {
     $tmp = "$Result.tmp"
     [IO.File]::WriteAllText($tmp, ($r | ConvertTo-Json -Compress), (New-Object Text.UTF8Encoding($false)))
     Move-Item -Force -Path $tmp -Destination $Result
+    # Итог читает приложение пользователя: скрытый помощник, оставленный им перед установкой, ждёт этот файл и запускает Brod снова.
+    # Каталог состояния пользователю открыт без наследования (база, токены и ключи ему недоступны), поэтому чтение даётся только этому
+    # файлу. Без него помощник не мог прочитать итог и запускал приложение лишь по истечении 5 минут (проверено на Windows 11).
+    $sid = Get-AppUserSid
+    if ($sid) { & icacls.exe $Result /grant "*${sid}:(R)" | Out-Null }
 }
 # Установка прерывается посреди дела (файлы уже скопированы, прежнее остановлено): откат нужен, чтобы пользователь не остался без демона и без объяснения.
 # Каждый шаг отката — в своём try: ошибка копирования (файл занят) при $ErrorActionPreference = 'Stop' прерывает обработчик несмотря на

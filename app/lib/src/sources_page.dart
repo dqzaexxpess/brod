@@ -16,6 +16,19 @@ class SourcesPage extends StatefulWidget {
 }
 
 class _SourcesPageState extends State<SourcesPage> {
+  // обновление подписок, запущенное с этой страницы: полоска показывается только ему; обновление, которое идёт с вкладки «Узлы», здесь не
+  // видно (там у него своя плашка и полоска)
+  bool _refreshing = false;
+
+  Future<void> _refresh() async {
+    setState(() => _refreshing = true);
+    try {
+      await widget.model.refreshAndCheck();
+    } finally {
+      if (mounted) setState(() => _refreshing = false);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -58,12 +71,12 @@ class _SourcesPageState extends State<SourcesPage> {
           title: const Text('Источники подписок'),
           actions: [
             IconButton(tooltip: 'Обновить список источников', icon: const Icon(Icons.cloud_sync_outlined), onPressed: m.settingsLoading ? null : m.updateOtaSources),
-            IconButton(tooltip: 'Обновить подписки сейчас', icon: const Icon(Icons.refresh), onPressed: m.settingsLoading ? null : m.refreshAndCheck),
+            IconButton(tooltip: 'Обновить подписки сейчас', icon: const Icon(Icons.refresh), onPressed: m.settingsLoading || m.nodesLoading ? null : _refresh),
           ],
         ),
         floatingActionButton: FloatingActionButton.extended(onPressed: _addDialog, icon: const Icon(Icons.add), label: const Text('Добавить источник')),
         body: Column(children: [
-          SizedBox(height: 2, child: (m.settingsLoading || m.nodesLoading) ? const LinearProgressIndicator(minHeight: 2) : null),
+          SizedBox(height: 2, child: (m.settingsLoading || _refreshing) ? const LinearProgressIndicator(minHeight: 2) : null),
           Expanded(
             child: m.sources.isEmpty && !m.settingsLoading && !m.candidatesOk
                 ? const Center(child: Text('Источников нет'))

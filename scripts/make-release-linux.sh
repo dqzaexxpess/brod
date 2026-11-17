@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Архив релиза для Linux (его ставит кнопка «Установить» и `brodctl update install`): то же содержимое, что deploy/install-linux.sh кладёт в
 # ~/.local/opt/brod, плюс метка BROD-RELEASE («версия платформа»). Версия — buildinfo.Version.
-#   scripts/build.sh brodd brodctl && scripts/build-app.sh && scripts/make-release-linux.sh   → dist/brod-ВЕРСИЯ-linux-amd64.tar.gz
+#   scripts/build.sh brodd brodctl brod-helper && scripts/build-app.sh && scripts/make-release-linux.sh   → dist/brod-ВЕРСИЯ-linux-amd64.tar.gz
 # Дальше: otasign release … -asset linux-amd64=ФАЙЛ@URL, подпись и публикация.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -15,13 +15,19 @@ if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
   COMMIT="$COMMIT-dirty"
 fi
 BUNDLE=app/build/linux/x64/release/bundle
-for f in "$BUNDLE/brod" bin/brodd bin/brodctl; do
-  [ -x "$f" ] || { echo "нет $f — scripts/build.sh brodd brodctl && scripts/build-app.sh" >&2; exit 1; }
+for f in "$BUNDLE/brod" bin/brodd bin/brodctl bin/brod-helper; do
+  [ -x "$f" ] || { echo "нет $f — scripts/build.sh brodd brodctl brod-helper && scripts/build-app.sh" >&2; exit 1; }
 done
 STAGE=$(mktemp -d)
 trap 'rm -rf "$STAGE"' EXIT
 cp -a "$BUNDLE/." "$STAGE/"
 install -m 0755 bin/brodd bin/brodctl "$STAGE/"
+# установка из архива (install.sh) и всё, что ей нужно: помощник обновлений, правила polkit и NetworkManager, удаление
+mkdir -p "$STAGE/deploy"
+install -m 0755 deploy/archive-install.sh "$STAGE/install.sh"
+install -m 0755 deploy/archive-system.sh deploy/tun-setup.sh deploy/uninstall-linux.sh deploy/uninstall-helper.sh "$STAGE/deploy/"
+install -m 0644 deploy/dev.godbtw.brod.policy deploy/NetworkManager-brod.conf "$STAGE/deploy/"
+install -m 0755 bin/brod-helper "$STAGE/deploy/"
 printf '%s linux-amd64\n' "$VER" > "$STAGE/BROD-RELEASE"
 printf '%s\n' "$COMMIT" > "$STAGE/BROD-COMMIT"
 mkdir -p dist

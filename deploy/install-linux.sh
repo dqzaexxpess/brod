@@ -10,7 +10,7 @@
 # права нужно выдавать заново — скрипт делает это сам), правило NetworkManager и правило polkit для resolved. Он спросит пароль.
 # если поставлен помощник (sudo deploy/install-helper.sh), демон кладётся в /usr/local/lib/brod/brodd (root:root, прежний остаётся
 # brodd.prev), а ~/.local/opt/brod/brodd становится ссылкой на него: права получает файл, который пользователь не может переписать.
-# Без помощника — переходный режим: brodd в ~/.local/opt/brod (с предупреждением).
+# Без помощника установка ставит его сама (sudo): обновления из приложения идут только через него.
 #
 # Переменные: BROD_PREFIX (по умолчанию ~/.local) — куда ставить; удобно для проверки установки без изменения домашнего каталога.
 # Удаление: deploy/uninstall-linux.sh. Данные (узлы, выбор, WARP-аккаунт) в ~/.local/share/brod (прежний ~/.local/share/vpnclient переносится при первом запуске) не трогаются ни установкой, ни удалением
@@ -51,15 +51,22 @@ fi
 mkdir -p "$OPT" "$BINDIR" "$APPS" "$ICONS"
 rsync -a --delete "$BUNDLE/" "$OPT/"              # новые файлы встают атомарно по одному (rename), лишние старые удаляются
 install -m 0755 bin/brodctl "$OPT/"
-# помощник поставлен (файлы root:root, создать их может только root) — демон живёт в каталоге root, здесь ссылка на него
+# помощник обновлений: файлы root:root (создать их может только root); нет — ставим (нужен sudo), прежнего способа без него больше нет.
+# Демон тогда живёт в каталоге root, а здесь — ссылка на него.
 LIB=/usr/local/lib/brod
 HELPER=/usr/local/libexec/brod/brod-helper
+helper_ok() { [ -d "$LIB" ] && [ -f "$HELPER" ] && [ "$(stat -c %u "$LIB")" = 0 ] && [ "$(stat -c %u "$HELPER")" = 0 ]; }
+if [ "$SYSTEM" = 1 ] && ! helper_ok; then
+  echo "Помощник обновлений не установлен: ставлю (нужен sudo; можно пропустить: --no-system)…"
+  [ -x bin/brod-helper ] || scripts/build.sh brod-helper
+  sudo deploy/install-helper.sh bin/brod-helper
+fi
 HELPER_MODE=0
-if [ "$SYSTEM" = 1 ] && [ -d "$LIB" ] && [ -f "$HELPER" ] && [ "$(stat -c %u "$LIB")" = 0 ] && [ "$(stat -c %u "$HELPER")" = 0 ]; then
+if [ "$SYSTEM" = 1 ] && helper_ok; then
   HELPER_MODE=1
   ln -sfn "$LIB/brodd" "$OPT/brodd"
 else
-  install -m 0755 bin/brodd "$OPT/"                 # install заменяет файл переименованием, права cap_net_admin старого файла не переносятся
+  install -m 0755 bin/brodd "$OPT/"                 # без системного шага (--no-system): обычный файл, режим TUN работать не будет
 fi
 for t in brod brodd brodctl; do ln -sfn "$OPT/$t" "$BINDIR/$t"; done
 for t in vpnd vpnctl; do # прежние имена команд (до переименования в Brod): убираем только свои ссылки
@@ -96,12 +103,6 @@ if [ "$HELPER_MODE" = 1 ]; then
   if sudo test -e "$LIB/brodd"; then sudo ln -f "$LIB/brodd" "$LIB/brodd.prev"; fi
   sudo mv -f "$LIB/.install-linux-brodd" "$LIB/brodd"
   sudo "$ROOT/deploy/tun-setup.sh" "$LIB/brodd"
-elif [ "$SYSTEM" = 1 ]; then
-  echo
-  echo "ВНИМАНИЕ: переходный режим: помощник brod-helper не установлен, права выдаются файлу в каталоге пользователя."
-  echo "          Поставьте помощник: scripts/build.sh brod-helper && sudo deploy/install-helper.sh, затем повторите установку."
-  echo "Права для режима TUN и DNS (нужен sudo; можно пропустить: --no-system)…"
-  sudo "$ROOT/deploy/tun-setup.sh" "$OPT/brodd"
 else
   echo
   echo "Режим TUN работать не будет, пока не выполнено:  sudo $ROOT/deploy/tun-setup.sh $OPT/brodd"

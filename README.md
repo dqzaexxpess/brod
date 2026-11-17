@@ -4,7 +4,7 @@ VPN-клиент для Linux, Windows и Android на движке [sing-box-lx
 
 Состав: демон `brodd`, командная строка `brodctl` и приложение на Flutter (интерфейс на русском). На Android ядро работает внутри приложения.
 
-Лицензия: GPL-3.0. Версия 0.4.0 — первый публичный выпуск: [сборки для Windows и Android на странице Releases](https://github.com/dqzaexxpess/brod/releases/latest); на Linux первая установка пока из исходников (см. [Установка](#установка)).
+Лицензия: GPL-3.0. Готовые сборки для Linux, Windows и Android — на [странице Releases](https://github.com/dqzaexxpess/brod/releases/latest) (первый публичный выпуск 0.4.0; установка на Linux из архива — с 0.4.1, см. [Установка](#установка)).
 
 
 <p align="center">
@@ -93,9 +93,15 @@ VPN-клиент для Linux, Windows и Android на движке [sing-box-lx
 
 ## Установка
 
-Готовые сборки Windows и Android — на [странице Releases](https://github.com/dqzaexxpess/brod/releases/latest); архив Linux там предназначен для обновления уже установленной копии кнопкой «Установить». Ниже сборка из исходников. Для неё сначала нужен движок: `scripts/fetch-engine.sh` скачивает sing-box-lx нужной версии и накладывает патчи из `patches/`.
+Готовые сборки — на [странице Releases](https://github.com/dqzaexxpess/brod/releases/latest). Ниже сборка из исходников; для неё сначала нужен движок: `scripts/fetch-engine.sh` скачивает sing-box-lx нужной версии и накладывает патчи из `patches/`.
 
-**Linux**
+**Linux, из готового архива** (с выпуска 0.4.1)
+```bash
+mkdir brod && tar xzf brod-<версия>-linux-amd64.tar.gz -C brod && cd brod && ./install.sh
+```
+Приложение, демон и CLI ставятся в `~/.local/opt/brod`, команды — в `~/.local/bin`, ярлык — в меню. Затем один шаг с `sudo`: помощник обновлений (правило polkit), демон в `/usr/local/lib/brod` (root:root, права для TUN) и правила NetworkManager и polkit для DNS. `./install.sh --no-system` пропускает шаг с sudo (режим TUN работать не будет). Удаление: `deploy/uninstall-linux.sh [--system] [--purge]`. Дальше обновления ставит кнопка «Установить» в приложении.
+
+**Linux, из исходников**
 ```bash
 scripts/fetch-engine.sh
 deploy/install-linux.sh --build     # демон, CLI и приложение в ~/.local/opt/brod, ярлык в меню

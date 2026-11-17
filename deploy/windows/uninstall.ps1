@@ -21,6 +21,11 @@ if (Test-Path $ctl) { & $ctl killswitch release | Out-Null }
 Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path ([Environment]::GetFolderPath('CommonPrograms')) 'Brod.lnk')
 Remove-Item -Force -ErrorAction SilentlyContinue 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Brod', 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{6F3C1B7E-92A4-4D58-A0E1-5B9D7C2F4A11}_is1'
 if (Test-Path $Dir) { Remove-Item -Recurse -Force $Dir }
+# прежняя версия для отката обновления (<каталог>.prev), неудачная (<каталог>.failed) и недоразобранный релиз — рядом с каталогом
+# программы; без этого после первого обновления в Program Files оставалось ~115 МБ
+foreach ($d in "$Dir.prev", "$Dir.failed", "$Dir.update-stage") {
+    if (Test-Path -LiteralPath $d) { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue -LiteralPath $d }
+}
 $data = Join-Path $env:ProgramData 'Brod'
 if ($RemoveState) {
     Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $data
