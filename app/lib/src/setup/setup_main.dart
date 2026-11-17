@@ -21,6 +21,53 @@ Future<void> _copyDir(Directory from, Directory to) async {
   }
 }
 
+class _CloseListener with WindowListener {
+  _CloseListener(this.onClose);
+
+  final void Function() onClose;
+
+  @override
+  void onWindowClose() => onClose();
+}
+
+/// Помощник очистки запускается сразу, а не при выходе: он ждёт завершения этого процесса (при любом способе выхода: «Готово», крестик,
+/// сбой) и стирает временную копию, повторяя попытки, пока файлы заняты.
+Future<void> _spawnCleanup(String dir) async {
+  final path = dir.replaceAll("'", "''");
+  await Process.start(
+    'powershell.exe',
+    [
+      '-NoProfile',
+      '-WindowStyle',
+      'Hidden',
+      '-Command',
+      "Wait-Process -Id $pid -ErrorAction SilentlyContinue; for (\$i = 0; \$i -lt 30; \$i++) { Remove-Item -Recurse -Force -LiteralPath '$path' -ErrorAction SilentlyContinue; if (-not (Test-Path -LiteralPath '$path')) { break }; Start-Sleep 1 }",
+    ],
+    mode: ProcessStartMode.detached,
+  );
+}
+
+/// Копии прежних удалений и распаковок, оставшиеся от сбоев, стираются при следующем запуске (старше 10 минут, кроме своей папки).
+void _removeStaleTemp(String own) {
+  try {
+    final now = DateTime.now();
+    for (final e in Directory.systemTemp.listSync(followLinks: false)) {
+      final name = e.uri.pathSegments.where((s) => s.isNotEmpty).last;
+      if (e is! Directory || !(name.startsWith('brod-uninstall-') || name.startsWith('brod-setup-')) || e.path == own) continue;
+      if (own.startsWith(e.path)) continue;
+      if (now.difference(e.statSync().modified) > const Duration(minutes: 10)) {
+        try {
+          e.deleteSync(recursive: true);
+        } on FileSystemException {
+          // занята работающим процессом: останется до следующего раза
+        }
+      }
+    }
+  } on FileSystemException {
+    // каталог временных файлов недоступен: очистка не обязательна
+  }
+}
+
 /// Окно установки и удаления: тот же `Brod.exe`, запущенный с `--setup` (из архива, который распаковал setup.exe) или `--uninstall`
 /// (из «Параметры → Приложения»). Удаление сначала копирует программу во временную папку и работает оттуда: из своей же папки
 /// запущенный Brod.exe удалить себя не может.
@@ -36,6 +83,9 @@ Future<void> runSetup(SetupArgs a) async {
     exit(0);
   }
 
+  _removeStaleTemp(exeDir.path);
+  if (a.fromTemp) await _spawnCleanup(exeDir.path);
+
   final install = a.mode == SetupMode.install;
   final dir = a.installDir.isNotEmpty ? a.installDir : (install ? _join(Platform.environment['ProgramFiles'] ?? r'C:\Program Files', 'Brod') : exeDir.path);
 
@@ -50,19 +100,11 @@ Future<void> runSetup(SetupArgs a) async {
     },
   );
 
-  Future<void> leave(int code) async {
-    if (a.fromTemp) {
-      // временную копию стирает отдельный процесс после выхода этого (файлы запущенной программы заняты); без ожидания запуска помощника
-      // выход происходил раньше, чем он стартовал, и копия оставалась в TEMP
-      final path = exeDir.path.replaceAll("'", "''");
-      await Process.start(
-        'powershell.exe',
-        ['-NoProfile', '-WindowStyle', 'Hidden', '-Command', "for (\$i = 0; \$i -lt 20; \$i++) { Start-Sleep 1; Remove-Item -Recurse -Force -LiteralPath '$path' -ErrorAction SilentlyContinue; if (-not (Test-Path -LiteralPath '$path')) { break } }"],
-        mode: ProcessStartMode.detached,
-      );
-    }
-    exit(code);
-  }
+  // закрытие окна крестиком тоже выход: без этого процесс завершался, не дойдя до очистки
+  windowManager.addListener(_CloseListener(() => exit(0)));
+  await windowManager.setPreventClose(true);
+
+  void leave(int code) => exit(code);
 
   runApp(MaterialApp(
     debugShowCheckedModeBanner: false,

@@ -58,7 +58,11 @@ trap {
     Write-Host ''
     Write-Host "УСТАНОВКА НЕ ЗАВЕРШЕНА: $msg" -ForegroundColor Red
     if (Get-Service -Name 'Brod' -ErrorAction SilentlyContinue) {
-        Write-Host 'Служба Brod есть, но могла остаться остановленной. Запуск: Start-Service Brod; повторная установка безопасна.'
+        if ((Get-Service -Name 'Brod').Status -eq 'Running') {
+            Write-Host 'Служба Brod работает. Повторная установка безопасна.'
+        } else {
+            Write-Host 'Служба Brod остановлена. Запуск: Start-Service Brod; повторная установка безопасна.'
+        }
     } else {
         Write-Host 'Службы Brod нет, демон не работает. Повторите установку: скрипт можно запускать снова, он доделает недостающее.'
     }

@@ -14,7 +14,7 @@ import (
 	"brod/warp"
 )
 
-// T-8: фоновые циклы ruleSetLoop, routeViaLoop, warpAutoLoop. Периоды подменяются пакетными переменными (как warpFastEvery);
+// Фоновые циклы ruleSetLoop, routeViaLoop, warpAutoLoop. Периоды подменяются пакетными переменными (как warpFastEvery);
 // loopWait только верхняя граница ожидания на случай поломки, а не часть сценария.
 
 const loopWait = 10 * time.Second

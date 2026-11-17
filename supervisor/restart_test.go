@@ -8,7 +8,7 @@ import (
 	"brod/core"
 )
 
-// T-8: Restart пересоздаёт ядро с прежними VPN и режимом, в том числе при выключенном VPN (аккаунт WARP читается при создании ядра).
+// Restart пересоздаёт ядро с прежними VPN и режимом, в том числе при выключенном VPN (аккаунт WARP читается при создании ядра).
 func TestRestartKeepsStateAndRecreatesCore(t *testing.T) {
 	r := &rig{dir: t.TempDir()}
 	s, err := New(context.Background(), r.cfg())

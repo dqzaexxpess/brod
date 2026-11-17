@@ -42,6 +42,7 @@ Widget wizard(SetupMode mode, FakeRunner r, {List<int>? exits, List<String>? lau
     );
 
 void main() {
+  detailsTest();
   test('аргументы запуска', () {
     expect(parseSetupArgs(['--setup']).mode, SetupMode.install);
     final u = parseSetupArgs(['--uninstall', '--from-temp', '--install-dir', r'C:\Program Files\Brod']);
@@ -163,5 +164,21 @@ void main() {
     await t.tap(find.text('Удалить'));
     await t.pumpAndSettle();
     expect(r2.removeData, isTrue);
+  });
+}
+
+void detailsTest() {
+  testWidgets('подробности ошибки свёрнуты и без строк, уже сказанных в фразе', (t) async {
+    final r = FakeRunner(1, ["УСТАНОВКА НЕ ЗАВЕРШЕНА: учётная запись 'X' не найдена.", 'Служба Brod работает. Повторная установка безопасна.']);
+    await t.pumpWidget(wizard(SetupMode.install, r, exits: []));
+    await t.tap(find.text('Установить'));
+    await t.pumpAndSettle();
+    expect(find.text("Учётная запись 'X' не найдена."), findsOneWidget);
+    expect(find.text('Подробности'), findsOneWidget);
+    expect(find.textContaining('Служба Brod работает'), findsNothing, reason: 'свёрнуто');
+    await t.tap(find.text('Подробности'));
+    await t.pumpAndSettle();
+    expect(find.textContaining('Служба Brod работает'), findsOneWidget);
+    expect(find.textContaining('НЕ ЗАВЕРШЕНА'), findsNothing, reason: 'строка с фразой не повторяется в подробностях');
   });
 }

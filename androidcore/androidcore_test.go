@@ -1,4 +1,4 @@
-// Тесты чистой логики androidcore (T-6): bridge.go собирается без тега android, поэтому тесты идут обычным go test на Linux.
+// Тесты чистой логики androidcore: bridge.go собирается без тега android, поэтому тесты идут обычным go test на Linux.
 // Мост Kotlin↔Go, Start/Stop и сам VpnService тестами не охвачены: только телефон.
 package androidcore
 

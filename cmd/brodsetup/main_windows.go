@@ -33,7 +33,10 @@ type shellExecuteInfo struct {
 	hProcess       windows.Handle
 }
 
-const seeMaskNoCloseProcess = 0x00000040
+const (
+	seeMaskNoCloseProcess = 0x00000040
+	createNoWindow        = 0x08000000
+)
 
 var procShellExecuteEx = windows.NewLazySystemDLL("shell32.dll").NewProc("ShellExecuteExW")
 
@@ -86,6 +89,8 @@ func silent(o options, args []string) int {
 	}
 	cmd := exec.Command("powershell.exe", psArgs...)
 	cmd.Dir = dir
+	// загрузчик — оконное приложение без консоли: без этого флага PowerShell открывает своё окно и в тихом режиме
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: createNoWindow}
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 	if err := cmd.Run(); err != nil {
 		if ee, ok := err.(*exec.ExitError); ok && ee.ExitCode() != 0 {

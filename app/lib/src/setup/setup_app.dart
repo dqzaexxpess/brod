@@ -148,7 +148,7 @@ class _SetupWizardState extends State<SetupWizard> {
           const SizedBox(height: 8),
           Text(o.cancelled ? 'Запрос Windows на повышение прав был отклонён. Brod не изменён.' : (failureSummary(o.lines).isEmpty ? 'Код ${o.exitCode}.' : failureSummary(o.lines)), style: sub.copyWith(color: cs.onSurface)),
           const SizedBox(height: 14),
-          if (!o.cancelled) Expanded(child: _logView(sub, last: 14)) else const Spacer(),
+          if (!o.cancelled) Expanded(child: _details(o, sub)) else const Spacer(),
           const SizedBox(height: 8),
           Row(mainAxisAlignment: MainAxisAlignment.end, children: [
             TextButton(onPressed: () => widget.onExit(o.exitCode == 0 ? 1 : o.exitCode), child: const Text('Закрыть')),
@@ -191,6 +191,20 @@ class _SetupWizardState extends State<SetupWizard> {
           FilledButton(onPressed: _run, child: const Text('Удалить')),
         ]),
       ]);
+
+  /// Подробности ошибки свёрнуты: под фразой остаётся протокол без строк, которые уже сказаны в ней.
+  Widget _details(SetupOutcome o, TextStyle sub) {
+    final summary = failureSummary(o.lines);
+    final rest = [for (final l in o.lines) if (summary.isEmpty || !l.toLowerCase().contains(summary.toLowerCase().substring(0, summary.length.clamp(0, 30)))) l];
+    if (rest.isEmpty) return const SizedBox.shrink();
+    return SingleChildScrollView(
+      child: ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        title: Text('Подробности', style: sub),
+        children: [SelectableText(rest.join('\n'), style: sub.copyWith(fontSize: 12.5, height: 1.4))],
+      ),
+    );
+  }
 
   Widget _logView(TextStyle sub, {int last = 8}) {
     final tail = _lines.length > last ? _lines.sublist(_lines.length - last) : _lines;

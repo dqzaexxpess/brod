@@ -233,7 +233,7 @@ jobs:
       - name: Исходники движка
         run: scripts/fetch-engine.sh
 
-      # T-5: тесты *_windows_test.go (раскладка структур WFP, netid, memwatch, метрика сети) нигде больше не исполняются
+      # Тесты *_windows_test.go (раскладка структур WFP, netid, memwatch, метрика сети) нигде больше не исполняются
       - name: Тесты Go под Windows
         env:
           CGO_ENABLED: "0"

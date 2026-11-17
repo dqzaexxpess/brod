@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-// T-8: регистрация аккаунта без сети: подставной http.Client отвечает за api.cloudflareclient.com.
+// Регистрация аккаунта без сети: подставной http.Client отвечает за api.cloudflareclient.com.
 
 type fakeRT struct {
 	mu   sync.Mutex
