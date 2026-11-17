@@ -261,10 +261,24 @@ func realMain() {
 				log.Print(buf.String())
 				sup.ReleaseKillswitch() // штатный выход не должен оставлять сеть заблокированной
 			}
-			_ = os.Remove(*sock)
+			// слушатель закрывается и здесь: сервер API закрывает его параллельно, и без этого на Windows файл сокета ещё занят в момент удаления
+			// и остаётся после остановки службы (нечитаемый файл ломал копирование каталога состояния)
+			_ = ln.Close()
+			removeSocket(*sock)
 			return
 		}
 	}
+}
+
+// removeSocket удаляет файл сокета; пока его держит закрывающийся слушатель (Windows), пробует ещё до секунды.
+func removeSocket(path string) {
+	for i := 0; i < 10; i++ {
+		if err := os.Remove(path); err == nil || os.IsNotExist(err) {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	log.Printf("файл сокета %s не удалён", path)
 }
 
 // loadSeeds — источники по умолчанию плюс файл пользователя (если задан и читается).

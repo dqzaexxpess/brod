@@ -6,3 +6,4 @@ bin/
 /brodd.exe
 /brodctl.exe
 dist/
+*.syso
