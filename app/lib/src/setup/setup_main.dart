@@ -31,20 +31,27 @@ class _CloseListener with WindowListener {
 }
 
 /// Помощник очистки запускается сразу, а не при выходе: он ждёт завершения этого процесса (при любом способе выхода: «Готово», крестик,
-/// сбой) и стирает временную копию, повторяя попытки, пока файлы заняты.
+/// сбой) и стирает временную копию, повторяя попытки, пока файлы заняты. Ход пишется в %TEMP%\brod-cleanup.log (при успехе файл стирается:
+/// остаётся только при неудаче, по нему видно причину). Запасной путь — запись RunOnce: если помощник не отработал, копию уберёт
+/// следующий вход в систему.
 Future<void> _spawnCleanup(String dir) async {
   final path = dir.replaceAll("'", "''");
-  await Process.start(
-    'powershell.exe',
-    [
-      '-NoProfile',
-      '-WindowStyle',
-      'Hidden',
-      '-Command',
-      "Wait-Process -Id $pid -ErrorAction SilentlyContinue; for (\$i = 0; \$i -lt 30; \$i++) { Remove-Item -Recurse -Force -LiteralPath '$path' -ErrorAction SilentlyContinue; if (-not (Test-Path -LiteralPath '$path')) { break }; Start-Sleep 1 }",
-    ],
-    mode: ProcessStartMode.detached,
-  );
+  // рабочий каталог помощника — вне удаляемой папки: процесс с текущим каталогом внутри держит её, и Remove-Item не может её стереть
+  final home = Platform.environment['SystemRoot'] ?? Directory.systemTemp.path;
+  final script = "Set-Location -LiteralPath '$home'; \$log = Join-Path \$env:TEMP 'brod-cleanup.log'; "
+      "function L(\$m) { Add-Content -LiteralPath \$log -Value ((Get-Date -Format o) + ' ' + \$m) }; "
+      "Set-Content -LiteralPath \$log -Value ((Get-Date -Format o) + ' ждём процесс $pid'); "
+      "Wait-Process -Id $pid -ErrorAction SilentlyContinue; L 'процесс завершён'; "
+      "for (\$i = 0; \$i -lt 30; \$i++) { "
+      "try { Remove-Item -Recurse -Force -LiteralPath '$path' -ErrorAction Stop } catch { L ('ошибка: ' + \$_.Exception.Message) }; "
+      "if (-not (Test-Path -LiteralPath '$path')) { Remove-Item -LiteralPath \$log -Force -ErrorAction SilentlyContinue; break }; "
+      "Start-Sleep 1 }";
+  await Process.start('powershell.exe', ['-NoProfile', '-WindowStyle', 'Hidden', '-Command', script], workingDirectory: home, mode: ProcessStartMode.detached);
+  try {
+    await Process.run('reg', ['add', r'HKCU\Software\Microsoft\Windows\CurrentVersion\RunOnce', '/v', 'BrodCleanup', '/t', 'REG_SZ', '/d', 'cmd /c rd /s /q "$dir"', '/f']);
+  } on ProcessException {
+    // реестр недоступен: остаётся помощник и очистка при следующем запуске установщика
+  }
 }
 
 /// Копии прежних удалений и распаковок, оставшиеся от сбоев, стираются при следующем запуске (старше 10 минут, кроме своей папки).
@@ -84,7 +91,15 @@ Future<void> runSetup(SetupArgs a) async {
   }
 
   _removeStaleTemp(exeDir.path);
-  if (a.fromTemp) await _spawnCleanup(exeDir.path);
+  if (a.fromTemp) {
+    // сам процесс тоже не должен стоять в удаляемой папке
+    try {
+      Directory.current = Platform.environment['SystemRoot'] ?? Directory.systemTemp.path;
+    } on FileSystemException {
+      // остаёмся где были: помощник всё равно запускается с другим каталогом
+    }
+    await _spawnCleanup(exeDir.path);
+  }
 
   final install = a.mode == SetupMode.install;
   final dir = a.installDir.isNotEmpty ? a.installDir : (install ? _join(Platform.environment['ProgramFiles'] ?? r'C:\Program Files', 'Brod') : exeDir.path);

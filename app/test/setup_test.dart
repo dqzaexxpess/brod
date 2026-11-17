@@ -168,6 +168,17 @@ void main() {
 }
 
 void detailsTest() {
+  testWidgets('обрывок перенесённой строки не попадает в подробности', (t) async {
+    final r = FakeRunner(1, ["УСТАНОВКА НЕ ЗАВЕРШЕНА: учётная запись 'X' не найдена. Укажите её в виде ДОМЕН\\Имя или ИМЯ_КОМПЬЮТЕРА\\Имя (параметр -User).", 'мя (параметр -User).', 'Служба Brod работает.']);
+    await t.pumpWidget(wizard(SetupMode.install, r, exits: []));
+    await t.tap(find.text('Установить'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('Подробности'));
+    await t.pumpAndSettle();
+    expect(find.text('мя (параметр -User).'), findsNothing);
+    expect(find.text('Служба Brod работает.'), findsOneWidget);
+  });
+
   testWidgets('подробности ошибки свёрнуты и без строк, уже сказанных в фразе', (t) async {
     final r = FakeRunner(1, ["УСТАНОВКА НЕ ЗАВЕРШЕНА: учётная запись 'X' не найдена.", 'Служба Brod работает. Повторная установка безопасна.']);
     await t.pumpWidget(wizard(SetupMode.install, r, exits: []));

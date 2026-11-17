@@ -194,12 +194,16 @@ class _SetupWizardState extends State<SetupWizard> {
 
   /// Подробности ошибки свёрнуты: под фразой остаётся протокол без строк, которые уже сказаны в ней.
   Widget _details(SetupOutcome o, TextStyle sub) {
-    final summary = failureSummary(o.lines);
-    final rest = [for (final l in o.lines) if (summary.isEmpty || !l.toLowerCase().contains(summary.toLowerCase().substring(0, summary.length.clamp(0, 30)))) l];
+    final summary = failureSummary(o.lines).toLowerCase();
+    // строки, уже сказанные во фразе, и их обрывки: консоль PowerShell переносит длинную строку на ширине окна, и хвост («мя (параметр -User).»)
+    // попадает в протокол отдельной строкой
+    final rest = [for (final l in o.lines) if (summary.isEmpty || !(summary.contains(l.toLowerCase()) || l.toLowerCase().contains(summary.substring(0, summary.length.clamp(0, 30))))) l];
     if (rest.isEmpty) return const SizedBox.shrink();
     return SingleChildScrollView(
       child: ExpansionTile(
         tilePadding: EdgeInsets.zero,
+        childrenPadding: EdgeInsets.zero,
+        expandedAlignment: Alignment.centerLeft,
         title: Text('Подробности', style: sub),
         children: [SelectableText(rest.join('\n'), style: sub.copyWith(fontSize: 12.5, height: 1.4))],
       ),

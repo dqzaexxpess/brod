@@ -752,7 +752,7 @@ class NodeDto {
 
 /// Активный узел из `GET /v1/status`.
 class ActiveNode {
-  const ActiveNode({required this.proto, required this.server, required this.port, this.id = '', this.country = '', this.clean = '', this.latencyMs = 0, this.speedKBps = 0, this.udp = '', this.ip = '', this.label = ''});
+  const ActiveNode({required this.proto, required this.server, required this.port, this.id = '', this.country = '', this.clean = '', this.latencyMs = 0, this.speedKBps = 0, this.udp = '', this.youtube = false, this.insecure = false, this.own = false, this.ip = '', this.label = ''});
 
   final String id;
   final String proto;
@@ -763,14 +763,17 @@ class ActiveNode {
   final int latencyMs;
   final double speedKBps;
   final String udp; // good | unstable | none | ''
+  final bool youtube; // YouTube через узел открывается
+  final bool insecure; // узел без проверки TLS
+  final bool own; // собственный сервер
   final String ip;
   final String label;
 
   @override
-  bool operator ==(Object other) => other is ActiveNode && other.id == id && other.proto == proto && other.server == server && other.port == port && other.country == country && other.clean == clean && other.latencyMs == latencyMs && other.speedKBps.round() == speedKBps.round() && other.udp == udp && other.ip == ip && other.label == label;
+  bool operator ==(Object other) => other is ActiveNode && other.id == id && other.proto == proto && other.server == server && other.port == port && other.country == country && other.clean == clean && other.latencyMs == latencyMs && other.speedKBps.round() == speedKBps.round() && other.udp == udp && other.youtube == youtube && other.insecure == insecure && other.own == own && other.ip == ip && other.label == label;
 
   @override
-  int get hashCode => Object.hash(id, proto, server, port, country, clean, latencyMs, speedKBps.round(), udp, ip, label);
+  int get hashCode => Object.hash(id, proto, server, port, country, clean, latencyMs, speedKBps.round(), udp, youtube, insecure, own, ip, label);
 
   String get title => proto == 'warp' ? 'Cloudflare WARP' : (label.isNotEmpty ? label : (port > 0 ? '$proto · $server:$port' : '$proto · $server'));
 }
@@ -975,6 +978,9 @@ class DaemonStatus {
               latencyMs: (a['latency_ms'] as num?)?.toInt() ?? 0,
               speedKBps: (a['speed_kbps'] as num?)?.toDouble() ?? 0,
               udp: (a['udp'] as String?) ?? '',
+              youtube: a['youtube'] == true,
+              insecure: a['insecure'] == true,
+              own: a['own'] == true,
             )
           : null,
     );

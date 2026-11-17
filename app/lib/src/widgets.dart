@@ -50,9 +50,11 @@ Color speedColor(double mbps, ColorScheme cs) => mbps >= 10 ? Colors.green : (mb
 
 /// Строка таблеток узла: пинг, скорость, чистота, YouTube, «мой».
 class NodePills extends StatelessWidget {
-  const NodePills({super.key, required this.node});
+  const NodePills({super.key, required this.node, this.showPing = true, this.leading = const []});
 
   final NodeDto node;
+  final bool showPing; // пинг не показывается, если его число уже есть в другой таблетке (главная: «выход работает · N мс»)
+  final List<Widget> leading; // таблетки перед остальными
 
   @override
   Widget build(BuildContext context) {
@@ -60,8 +62,9 @@ class NodePills extends StatelessWidget {
     final e = node.exit;
     final cl = e == null ? null : cleanStyle(e.clean, cs);
     return Wrap(spacing: 6, runSpacing: 4, children: [
+      ...leading,
       if (node.own) const Pill(text: 'мой', icon: Icons.star_rounded, color: Colors.purple, filled: true),
-      if (node.latencyMs > 0) Pill(text: '${node.latencyMs} мс', icon: Icons.network_ping, color: pingColor(node.latencyMs, cs)),
+      if (showPing && node.latencyMs > 0) Pill(text: '${node.latencyMs} мс', icon: Icons.network_ping, color: pingColor(node.latencyMs, cs)),
       if (node.speedKBps > 0) Pill(text: '${node.speedMbps.toStringAsFixed(node.speedMbps < 10 ? 1 : 0)} Мбит/с', icon: Icons.speed, color: speedColor(node.speedMbps, cs)),
       if (callsStyle(node.udp, cs) case final c?) Pill(text: c.label, icon: c.icon, color: c.color, filled: node.udp == 'good'),
       if (cl != null && cl.label.isNotEmpty) Pill(text: cl.label, icon: Icons.verified_user_outlined, color: cl.color, filled: true),

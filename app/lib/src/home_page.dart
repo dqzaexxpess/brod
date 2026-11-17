@@ -392,6 +392,9 @@ class _NodeCard extends StatelessWidget {
       latencyMs: node.latencyMs,
       speedKBps: node.speedKBps,
       udp: node.udp,
+      youtube: node.youtube,
+      insecure: node.insecure,
+      own: node.own,
       exit: node.clean.isEmpty && node.country.isEmpty ? null : ExitDto(ip: node.ip, country: node.country, clean: node.clean),
     );
     return Card.filled(
@@ -441,8 +444,10 @@ class _NodeCard extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(right: 8),
             child: Wrap(spacing: 6, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
-              if (!warp) NodePills(node: dto),
-              if (p != null) Pill(text: exitOk == true ? 'выход работает · ${p.latencyMs} мс' : 'выход не отвечает', icon: exitOk == true ? Icons.check_circle_outline : Icons.error_outline, color: exitOk == true ? Colors.green : cs.error, filled: true),
+              if (!warp)
+                NodePills(node: dto, showPing: p == null, leading: [if (p != null) _exitPill(p, exitOk == true, cs)])
+              else if (p != null)
+                _exitPill(p, exitOk == true, cs),
               if (model.status?.degraded == true) Pill(text: 'деградирует', icon: Icons.warning_amber, color: cs.error, filled: true),
             ]),
           ),
@@ -452,6 +457,11 @@ class _NodeCard extends StatelessWidget {
     );
   }
 }
+
+/// Одна таблетка вместо двух («пинг» и «выход работает»): число — задержка живой проверки выхода, цвет — по порогам пинга.
+Widget _exitPill(ProbeResult p, bool ok, ColorScheme cs) => ok
+    ? Pill(text: 'выход работает · ${p.latencyMs} мс', icon: Icons.check_circle_outline, color: pingColor(p.latencyMs, cs), filled: true)
+    : Pill(text: 'выход не отвечает', icon: Icons.error_outline, color: cs.error, filled: true);
 
 class _FooterRow extends StatelessWidget {
   const _FooterRow({required this.model});
