@@ -57,9 +57,20 @@ void main() {
     expect(defaultAccount({}), '');
   });
 
-  test('протокол PowerShell без служебных строк и в обеих кодировках', () {
-    const raw = '**********************\nWindows PowerShell transcript start\nStart time: 20261117\n**********************\nГотово: C:\\Brod\n**********************\nWindows PowerShell transcript end\n';
-    expect(transcriptLines(raw), [r'Готово: C:\Brod']);
+  test('протокол PowerShell: заголовок на любом языке и шум ошибок отброшены, повторы схлопнуты', () {
+    const raw = '**********************\nНачало сеанса Windows PowerShell\nВремя начала: 20261117\nИмя пользователя: PC\\misav\n**********************\n'
+        'Копирование файлов\n'
+        "УСТАНОВКА НЕ ЗАВЕРШЕНА: учётная запись 'НЕТ\\ТАКОГО' не найдена.\n"
+        "УСТАНОВКА НЕ ЗАВЕРШЕНА: учётная запись 'НЕТ\\ТАКОГО' не найдена.\n"
+        'PS>TerminatingError(): "x"\n'
+        r'C:\Temp\install.ps1:76 знак:13' '\n'
+        '+ catch { throw "..." }\n'
+        '**********************\nКонец сеанса\n**********************\n';
+    final lines = transcriptLines(raw);
+    expect(lines, ['Копирование файлов', "УСТАНОВКА НЕ ЗАВЕРШЕНА: учётная запись 'НЕТ\\ТАКОГО' не найдена."]);
+    expect(failureSummary(lines), "Учётная запись 'НЕТ\\ТАКОГО' не найдена.");
+    expect(failureSummary(const ['Копирование']), 'Копирование');
+    expect(failureSummary(const []), '');
     expect(decodeLog([0xEF, 0xBB, 0xBF, 0xD0, 0x93]), 'Г');
     expect(decodeLog([0xFF, 0xFE, 0x13, 0x04]), 'Г');
   });
@@ -118,10 +129,15 @@ void main() {
     await t.tap(find.text('Установить'));
     await t.pumpAndSettle();
     expect(find.text('Не удалось установить'), findsOneWidget);
-    expect(find.textContaining('не удалось определить учётную запись'), findsOneWidget);
+    expect(find.textContaining('не удалось определить учётную запись'), findsWidgets);
+    await t.tap(find.text('Назад'));
+    await t.pumpAndSettle();
+    expect(find.text('Установить'), findsOneWidget, reason: 'после ошибки можно вернуться к полю учётной записи');
+    await t.tap(find.text('Установить'));
+    await t.pumpAndSettle();
     await t.tap(find.text('Повторить'));
     await t.pumpAndSettle();
-    expect(r.calls, 2);
+    expect(r.calls, 3);
   });
 
   testWidgets('отказ от повышения прав объясняется, а не выглядит ошибкой установки', (t) async {

@@ -268,8 +268,9 @@ class _RulesPageState extends State<RulesPage> {
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
+      isScrollControlled: true, // шаблонов больше, чем помещается в шторку: без этого нижние обрезались
       builder: (ctx) => SafeArea(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
+        child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
           const Padding(padding: EdgeInsets.fromLTRB(20, 0, 20, 8), child: Align(alignment: Alignment.centerLeft, child: Text('Шаблоны добавляются в список; затем нажмите «Применить»'))),
           for (final p in rulePresets.where((p) => !(p.desktopOnly && Platform.isAndroid)))
             ListTile(
@@ -284,7 +285,7 @@ class _RulesPageState extends State<RulesPage> {
                       Navigator.pop(ctx);
                     },
             ),
-        ]),
+        ])),
       ),
     );
   }

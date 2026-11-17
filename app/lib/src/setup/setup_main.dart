@@ -50,11 +50,16 @@ Future<void> runSetup(SetupArgs a) async {
     },
   );
 
-  void leave(int code) {
+  Future<void> leave(int code) async {
     if (a.fromTemp) {
-      // временную копию стирает отдельный процесс после выхода этого
-      Process.start('powershell.exe', ['-NoProfile', '-WindowStyle', 'Hidden', '-Command', "Start-Sleep 3; Remove-Item -Recurse -Force -LiteralPath '${exeDir.path.replaceAll("'", "''")}'"],
-          mode: ProcessStartMode.detached);
+      // временную копию стирает отдельный процесс после выхода этого (файлы запущенной программы заняты); без ожидания запуска помощника
+      // выход происходил раньше, чем он стартовал, и копия оставалась в TEMP
+      final path = exeDir.path.replaceAll("'", "''");
+      await Process.start(
+        'powershell.exe',
+        ['-NoProfile', '-WindowStyle', 'Hidden', '-Command', "for (\$i = 0; \$i -lt 20; \$i++) { Start-Sleep 1; Remove-Item -Recurse -Force -LiteralPath '$path' -ErrorAction SilentlyContinue; if (-not (Test-Path -LiteralPath '$path')) { break } }"],
+        mode: ProcessStartMode.detached,
+      );
     }
     exit(code);
   }
@@ -67,7 +72,7 @@ Future<void> runSetup(SetupArgs a) async {
       mode: a.mode,
       runner: WindowsSetupRunner(scriptsDir: exeDir.path),
       installDir: dir,
-      onExit: leave,
+      onExit: (c) => leave(c),
       launchApp: (d) => Process.start(_join(d, 'Brod.exe'), const [], workingDirectory: d, mode: ProcessStartMode.detached),
     ),
   ));

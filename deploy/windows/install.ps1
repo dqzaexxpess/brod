@@ -73,7 +73,7 @@ $data = Join-Path $env:ProgramData 'Brod'
 if (-not $Update) {
     $user = if ($User) { $User } else { [Security.Principal.WindowsIdentity]::GetCurrent().Name }
     try { $userSid = (New-Object Security.Principal.NTAccount($user)).Translate([Security.Principal.SecurityIdentifier]).Value }
-    catch { throw "не удалось определить учётную запись '$user' (параметр -User): $($_.Exception.Message)" }
+    catch { throw "учётная запись '$user' не найдена. Укажите её в виде ДОМЕН\Имя или ИМЯ_КОМПЬЮТЕРА\Имя (параметр -User)." }
     Write-Host "Доступ к приложению и остановка службы: $user ($userSid)."
 }
 

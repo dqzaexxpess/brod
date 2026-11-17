@@ -347,12 +347,12 @@ List<RouteRuleDto> discordCallRules() => [
         RouteRuleDto(title: 'Звонки Discord: приложение', match: RouteMatch(packageName: ['com.discord']))
       else
         RouteRuleDto(title: 'Звонки Discord: процесс', match: RouteMatch(processName: ['Discord.exe', 'Discord', 'discord'])),
-      RouteRuleDto(title: 'Звонки Discord: голос по UDP', match: RouteMatch(network: 'udp', portRange: ['19294:19344', '50000:65535'])),
+      RouteRuleDto(title: 'Звонки Discord: голос по UDP', match: RouteMatch(network: 'udp', portRange: ['19294:19344'])),
       RouteRuleDto(title: 'Звонки Discord: домены', match: RouteMatch(domainSuffix: ['discord.com', 'discord.gg', 'discordapp.com', 'discordapp.net', 'discord.media'])),
     ];
 
 const rulePresets = <RulePreset>[
-  RulePreset('Звонки Discord', 'Процесс, домены и UDP-порты голоса — через VPN, в том числе в режиме «Только заблокированное»', Icons.headset_mic_outlined, 'proxy', [],
+  RulePreset('Звонки Discord', 'Процесс, домены и UDP-порты голоса (19294–19344) — через VPN, в том числе в режиме «Только заблокированное»', Icons.headset_mic_outlined, 'proxy', [],
       build: discordCallRules),
   RulePreset('Мессенджеры', 'Telegram, WhatsApp, Discord, Signal — через VPN', Icons.chat_bubble_outline, 'proxy', [
     'telegram.org', 't.me', 'telegram.me', 'telesco.pe', 'whatsapp.com', 'whatsapp.net', 'discord.com', 'discord.gg', 'discordapp.com', 'discord.media', 'signal.org', 'signal.art',

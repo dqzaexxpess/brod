@@ -22,34 +22,37 @@ abstract class SetupRunner {
   Future<SetupOutcome> uninstall({required String dir, required bool removeData, required void Function(String line) onLine});
 }
 
-/// Строки протокола PowerShell (Start-Transcript) без заголовка и подвала сеанса.
+/// Строки протокола PowerShell (Start-Transcript) без заголовка и подвала сеанса. Заголовок и подвал — блоки между строками из звёздочек;
+/// их текст зависит от языка системы, поэтому опознаются по рамке, а не по словам. Служебные строки ошибок PowerShell (`PS>TerminatingError`,
+/// положение в скрипте) отбрасываются, повторы подряд схлопываются.
 List<String> transcriptLines(String raw) {
-  const noise = [
-    '**********************',
-    'Windows PowerShell transcript',
-    'Start time:',
-    'End time:',
-    'Username:',
-    'RunAs User:',
-    'Configuration Name:',
-    'Machine:',
-    'Host Application:',
-    'Process ID:',
-    'PSVersion:',
-    'PSEdition:',
-    'PSCompatibleVersions:',
-    'BuildVersion:',
-    'CLRVersion:',
-    'WSManStackVersion:',
-    'PSRemotingProtocolVersion:',
-    'SerializationVersion:',
-    'Transcript started',
-    'Transcript stopped',
-  ];
-  return [
-    for (final l in const LineSplitter().convert(raw))
-      if (l.trim().isNotEmpty && !noise.any(l.trimLeft().startsWith)) l.trim(),
-  ];
+  final out = <String>[];
+  var inBlock = false;
+  for (final l in const LineSplitter().convert(raw)) {
+    final t = l.trim();
+    if (t.startsWith('*****')) {
+      inBlock = !inBlock;
+      continue;
+    }
+    if (inBlock || t.isEmpty) continue;
+    if (t.startsWith('PS>') || t.startsWith('+ ') || RegExp(r'^[A-Za-z]:\\.*\.ps1:\d+').hasMatch(t) || RegExp(r'^(CategoryInfo|FullyQualifiedErrorId)\b').hasMatch(t)) continue;
+    if (out.isNotEmpty && out.last == t) continue;
+    out.add(t);
+  }
+  return out;
+}
+
+/// Одна фраза для страницы ошибки: сообщение после «УСТАНОВКА НЕ ЗАВЕРШЕНА:» (его печатает install.ps1), иначе последняя строка протокола.
+String failureSummary(List<String> lines) {
+  const marker = 'УСТАНОВКА НЕ ЗАВЕРШЕНА:';
+  for (final l in lines.reversed) {
+    final i = l.indexOf(marker);
+    if (i >= 0) {
+      final t = l.substring(i + marker.length).trim();
+      return t.isEmpty ? t : t[0].toUpperCase() + t.substring(1);
+    }
+  }
+  return lines.isEmpty ? '' : lines.last;
 }
 
 /// Протокол читается как UTF-8 или UTF-16 (в зависимости от метки порядка байтов): кодировку выбирает PowerShell.

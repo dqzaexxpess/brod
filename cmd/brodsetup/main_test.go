@@ -51,9 +51,28 @@ func TestExtractWritesFiles(t *testing.T) {
 	}
 }
 
+// Архив из Compress-Archive (Windows PowerShell 5.1): имена с обратной косой чертой, каталоги записаны отдельными записями.
+func TestExtractBackslashNamesAndDirEntries(t *testing.T) {
+	dir := t.TempDir()
+	data := makeZip(t, map[string]string{
+		`data\app.so`:                              "a",
+		`data\flutter_assets\packages\`:            "",
+		`data\flutter_assets\packages\icons\a.ttf`: "b",
+	})
+	if err := extract(data, dir); err != nil {
+		t.Fatal(err)
+	}
+	if b, err := os.ReadFile(filepath.Join(dir, "data", "flutter_assets", "packages", "icons", "a.ttf")); err != nil || string(b) != "b" {
+		t.Fatalf("файл не распакован: %v %q", err, b)
+	}
+	if st, err := os.Stat(filepath.Join(dir, "data", "flutter_assets", "packages")); err != nil || !st.IsDir() {
+		t.Fatalf("каталог не создан: %v", err)
+	}
+}
+
 func TestExtractRejectsPathEscape(t *testing.T) {
 	dir := t.TempDir()
-	for _, name := range []string{"../evil.txt", "a/../../evil.txt", "/abs.txt"} {
+	for _, name := range []string{"../evil.txt", "a/../../evil.txt", "/abs.txt", `..\evil.txt`, `a\..\..\evil.txt`} {
 		if err := extract(makeZip(t, map[string]string{name: "x"}), dir); err == nil {
 			t.Errorf("путь %q принят", name)
 		}

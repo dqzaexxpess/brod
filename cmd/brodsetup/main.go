@@ -64,11 +64,14 @@ func extract(data []byte, dest string) error {
 		return err
 	}
 	for _, f := range zr.File {
-		target := filepath.Join(root, filepath.FromSlash(f.Name))
-		if rel, err := filepath.Rel(root, target); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(f.Name) {
+		// Compress-Archive в Windows PowerShell 5.1 пишет имена с обратной косой чертой («data\\flutter_assets\\»): приводим к прямой, иначе
+		// запись каталога принимается за файл, а вложенный путь создаётся раньше родительского
+		name := strings.ReplaceAll(f.Name, `\`, "/")
+		target := filepath.Join(root, filepath.FromSlash(name))
+		if rel, err := filepath.Rel(root, target); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(name) || strings.HasPrefix(name, "/") {
 			return fmt.Errorf("недопустимый путь в архиве: %q", f.Name)
 		}
-		if f.FileInfo().IsDir() {
+		if strings.HasSuffix(name, "/") || f.FileInfo().IsDir() {
 			if err := os.MkdirAll(target, 0o755); err != nil {
 				return err
 			}

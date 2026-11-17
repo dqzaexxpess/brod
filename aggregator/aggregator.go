@@ -253,7 +253,7 @@ func ExtractLinks(body []byte) []string {
 	// Вызывающие тело после этого не меняют (оно только читается из ответа или файла).
 	links := linesWithLinks(unsafe.String(unsafe.SliceData(body), len(body)))
 	if len(links) > 0 {
-		return links
+		return importer.ExpandDeepLinks(links)
 	}
 	trimmed := strings.Join(strings.Fields(string(body)), "")
 	if trimmed == "" {
@@ -262,7 +262,7 @@ func ExtractLinks(body []byte) []string {
 	for _, enc := range []*base64.Encoding{base64.StdEncoding, base64.RawStdEncoding, base64.URLEncoding, base64.RawURLEncoding} {
 		if dec, err := enc.DecodeString(trimmed); err == nil {
 			if links := linesWithLinks(string(dec)); len(links) > 0 {
-				return links
+				return importer.ExpandDeepLinks(links)
 			}
 		}
 	}

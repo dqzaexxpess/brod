@@ -7,7 +7,7 @@ import "testing"
 func TestDiscordCallRulesReachTUNConfig(t *testing.T) {
 	rules := []RouteRule{
 		{ID: "d1", Enabled: true, Action: ActionProxy, Match: RouteMatch{ProcessName: []string{"Discord.exe", "Discord", "discord"}}},
-		{ID: "d2", Enabled: true, Action: ActionProxy, Match: RouteMatch{Network: "udp", PortRange: []string{"19294:19344", "50000:65535"}}},
+		{ID: "d2", Enabled: true, Action: ActionProxy, Match: RouteMatch{Network: "udp", PortRange: []string{"19294:19344"}}},
 	}
 	for i := range rules {
 		if err := rules[i].validate(); err != nil {
