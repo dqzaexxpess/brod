@@ -45,7 +45,7 @@ Future<void> _spawnCleanup(String dir) async {
       "Wait-Process -Id $pid -ErrorAction SilentlyContinue; L 'процесс завершён'; "
       "for (\$i = 0; \$i -lt 30; \$i++) { "
       "try { Remove-Item -Recurse -Force -LiteralPath '$path' -ErrorAction Stop } catch { L ('ошибка: ' + \$_.Exception.Message) }; "
-      "if (-not (Test-Path -LiteralPath '$path')) { Remove-Item -LiteralPath \$log -Force -ErrorAction SilentlyContinue; break }; "
+      "if (-not (Test-Path -LiteralPath '$path')) { Remove-Item -LiteralPath \$log -Force -ErrorAction SilentlyContinue; Remove-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce' -Name BrodCleanup -ErrorAction SilentlyContinue; break }; "
       "Start-Sleep 1 }";
   // Запуск через `cmd /c start`, как у перезапуска приложения после обновления (model.dart): PowerShell, запущенный напрямую в режиме
   // detached (DETACHED_PROCESS, без консоли), завершается сразу и ничего не выполняет — помощник не стартовал, журнала не было

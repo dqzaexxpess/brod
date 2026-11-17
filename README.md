@@ -8,7 +8,7 @@ VPN-клиент для Linux, Windows и Android на движке [sing-box-lx
 
 
 <p align="center">
-  <img src="screenshots/android-home-v2.png" width="270" alt="Главная">
+  <img src="screenshots/android-home-v3.png" width="270" alt="Главная">
   <img src="screenshots/android-nodes-v2.png" width="270" alt="Узлы">
   <img src="screenshots/android-proxies-v2.png" width="270" alt="Прокси для Telegram">
 </p>
@@ -23,8 +23,8 @@ VPN-клиент для Linux, Windows и Android на движке [sing-box-lx
   <img src="screenshots/android-templates-v2.png" width="270" alt="Шаблоны правил">
 </p>
 <p align="center">
-  <img src="screenshots/linux-home-v2.png" width="330" alt="Brod на Linux">
-  <img src="screenshots/windows-home-v2.png" width="320" alt="Brod на Windows">
+  <img src="screenshots/linux-home-v3.png" width="330" alt="Brod на Linux">
+  <img src="screenshots/windows-home-v3.png" width="320" alt="Brod на Windows">
 </p>
 <p align="center"><sub>Android, Linux и Windows (адреса серверов на снимках размыты).</sub></p>
 
@@ -118,7 +118,7 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1
 
 Установщик (`setup.exe`) показывает окно в стиле Brod. Это загрузчик с архивом сборки: он открывает окно, окно запрашивает права администратора и запускает тот же `install.ps1`. Тихая установка: `setup.exe /S /USER=ДОМЕН\Имя` (коды возврата: 0 успех, 1 ошибка установки, 2 нет учётной записи, 3 повреждён архив, 1223 отказ в повышении прав). Удаление — «Параметры → Приложения → Brod»: окно спрашивает, удалять ли базу узлов и настройки.
 
-Файлы пока не подписаны: SmartScreen и Защитник могут показать предупреждение. Подпись кода запланирована после первого публичного релиза (SignPath).
+Файлы для Windows пока не подписаны кодом: SmartScreen и Защитник могут показать предупреждение. Подпись через SignPath Foundation запланирована ([политика подписи](CODE_SIGNING_POLICY.md)).
 
 **Android**
 
