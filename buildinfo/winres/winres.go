@@ -21,12 +21,15 @@ type Binary struct {
 	Name        string // имя файла без .exe
 	Description string // FileDescription
 	Dir         string // каталог main-пакета от корня репозитория
+	Original    string // OriginalFilename; пусто — Name + ".exe"
+	Manifest    bool   // добавить манифест приложения (установщик: права как у запустившего, Windows 10/11, длинные пути)
 }
 
-// Binaries — файлы демона, которым нужны ресурсы (Brod.exe получает их из Flutter, app/windows/runner/Runner.rc).
+// Binaries — файлы, которым нужны ресурсы (загрузчик установщика и демон с CLI) (Brod.exe получает их из Flutter, app/windows/runner/Runner.rc).
 var Binaries = []Binary{
 	{Name: "brodd", Description: "Brod daemon", Dir: "cmd/brodd"},
 	{Name: "brodctl", Description: "Brod command-line control", Dir: "cmd/brodctl"},
+	{Name: "brodsetup", Description: "Brod installer", Dir: "cmd/brodsetup", Original: "setup.exe", Manifest: true},
 }
 
 // IconPath — значок приложения (тот же, что у Brod.exe), от корня репозитория.
@@ -58,18 +61,35 @@ func Build(root string, b Binary) ([]byte, error) {
 		version.ProductName:      "Brod",
 		version.FileDescription:  b.Description,
 		version.InternalName:     b.Name,
-		version.OriginalFilename: b.Name + ".exe",
+		version.OriginalFilename: firstNonEmpty(b.Original, b.Name+".exe"),
 		version.CompanyName:      "Brod",
+		version.LegalCopyright:   "Copyright (C) 2026 Brod. GPL-3.0",
 	} {
 		if err := vi.Set(version.LangDefault, k, v); err != nil {
 			return nil, err
 		}
 	}
 	rs.SetVersionInfo(vi)
+	if b.Manifest {
+		rs.SetManifest(winres.AppManifest{
+			Description:    b.Description,
+			Compatibility:  winres.Win10AndAbove,
+			ExecutionLevel: winres.AsInvoker,
+			DPIAwareness:   winres.DPIPerMonitorV2,
+			LongPathAware:  true,
+		})
+	}
 
 	var out bytes.Buffer
 	if err := rs.WriteObject(&out, winres.ArchAMD64); err != nil {
 		return nil, err
 	}
 	return out.Bytes(), nil
+}
+
+func firstNonEmpty(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
 }

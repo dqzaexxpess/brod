@@ -169,10 +169,12 @@ func extractZip(archive, dest string) error {
 		if rel == "" {
 			continue
 		}
-		if zf.Mode()&os.ModeSymlink != 0 || (!zf.Mode().IsRegular() && !zf.FileInfo().IsDir()) {
+		// запись каталога из Compress-Archive (Windows PowerShell 5.1) заканчивается обратной косой чертой, и zip.FileInfo считает её файлом
+		isDir := zf.FileInfo().IsDir() || strings.HasSuffix(zf.Name, `\`) || strings.HasSuffix(zf.Name, "/")
+		if zf.Mode()&os.ModeSymlink != 0 || (!zf.Mode().IsRegular() && !isDir) {
 			return fmt.Errorf("%s: ссылки и устройства в релизе не допускаются", rel)
 		}
-		if zf.FileInfo().IsDir() {
+		if isDir {
 			if err := os.MkdirAll(filepath.Join(dest, filepath.FromSlash(rel)), 0o755); err != nil {
 				return err
 			}

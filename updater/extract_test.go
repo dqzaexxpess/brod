@@ -153,3 +153,31 @@ func TestExtractZip(t *testing.T) {
 		t.Fatal("zip-slip принят")
 	}
 }
+
+// Архив из Compress-Archive (Windows PowerShell 5.1): имена с обратной косой чертой и отдельные записи каталогов; архив с прямыми
+// косыми и записями каталогов (сборка в CI) распаковывается так же.
+func TestExtractZipWindowsNamesAndDirEntries(t *testing.T) {
+	for name, sep := range map[string]string{"backslash": `\`, "slash": "/"} {
+		var buf bytes.Buffer
+		zw := zip.NewWriter(&buf)
+		put := func(n, body string) {
+			w, _ := zw.Create(n)
+			w.Write([]byte(body))
+		}
+		put(releaseFile, ReleaseMark("0.4.0", "windows-amd64"))
+		put("data"+sep+"flutter_assets"+sep, "") // запись каталога
+		for _, f := range required["windows-amd64"] {
+			put(strings.ReplaceAll(f, "/", sep), "x")
+		}
+		zw.Close()
+		p := filepath.Join(t.TempDir(), "r.zip")
+		os.WriteFile(p, buf.Bytes(), 0o600)
+		dest := t.TempDir()
+		if err := Extract(p, dest); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if err := CheckLayout(dest, "windows-amd64", "0.4.0"); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+	}
+}

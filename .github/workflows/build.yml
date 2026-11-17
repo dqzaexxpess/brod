@@ -243,14 +243,6 @@ jobs:
       - name: Разбор install.ps1 и uninstall.ps1
         run: scripts/check-ps1.sh
 
-      # значок, сведения о файле (издатель, версия, описание) и манифест для setup.exe, brodd.exe и brodctl.exe
-      - name: Ресурсы Windows
-        env:
-          CGO_ENABLED: "0"
-        run: |
-          VER=$(sed -n 's/^const Version = "\(.*\)"$/\1/p' buildinfo/buildinfo.go)
-          deploy/windows/gen-resources.sh "$VER"
-
       - name: Демон и CLI
         env:
           CGO_ENABLED: "0"
@@ -289,11 +281,15 @@ jobs:
 
       # архив релиза для кнопки «Установить»: тот же состав плюс метка «версия платформа»
       - name: Архив релиза
+        shell: pwsh
         run: |
-          VER=$(sed -n 's/^const Version = "\(.*\)"$/\1/p' buildinfo/buildinfo.go)
-          printf '%s windows-amd64\n' "$VER" > dist/brod/BROD-RELEASE
-          powershell -NoProfile -Command "Compress-Archive -Path dist/brod/* -DestinationPath dist/brod-$VER-windows-amd64.zip -Force"
-          echo "brod-$VER-windows-amd64.zip sha256 $(sha256sum dist/brod-$VER-windows-amd64.zip | cut -d' ' -f1)"
+          $ver = (Select-String -Path buildinfo/buildinfo.go -Pattern '^const Version = "(.*)"$').Matches[0].Groups[1].Value
+          [IO.File]::WriteAllText("$PWD/dist/brod/BROD-RELEASE", "$ver windows-amd64`n")
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          # .NET пишет имена в архиве с прямой косой чертой (Compress-Archive из Windows PowerShell 5.1 — с обратной)
+          $zip = "$PWD/dist/brod-$ver-windows-amd64.zip"
+          [IO.Compression.ZipFile]::CreateFromDirectory("$PWD/dist/brod", $zip, [IO.Compression.CompressionLevel]::Optimal, $false)
+          "brod-$ver-windows-amd64.zip sha256 $((Get-FileHash $zip -Algorithm SHA256).Hash.ToLower())"
 
       # установщик: загрузчик cmd/brodsetup несёт архив релиза и запускает из него Brod.exe --setup (окно в оформлении Brod)
       - name: Установщик
