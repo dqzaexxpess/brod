@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:brod/src/prefs.dart';
 
 void main() {
+  welcomeTest();
   test('настройки приложения сохраняются и читаются', () {
     final dir = Directory.systemTemp.createTempSync('prefs');
     final f = File('${dir.path}/sub/app.json');
@@ -31,6 +32,18 @@ void main() {
     expect(Prefs.load(f).collapsed, isEmpty);
     f.writeAsStringSync('мусор');
     expect(Prefs.load(f).closeToTray, true, reason: 'повреждённый файл — умолчания');
+    dir.deleteSync(recursive: true);
+  });
+}
+
+void welcomeTest() {
+  test('мастер первого запуска: флаг переживает перезапуск', () {
+    final dir = Directory.systemTemp.createTempSync('prefs');
+    final f = File('${dir.path}/app.json');
+    final p = Prefs.load(f);
+    expect(p.welcomeDone, false);
+    p.update(welcomeDone: true);
+    expect(Prefs.load(f).welcomeDone, true);
     dir.deleteSync(recursive: true);
   });
 }

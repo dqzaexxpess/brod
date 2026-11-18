@@ -18,7 +18,7 @@ const accentPalette = <(String, int)>[
 
 /// Настройки самого приложения (окно, трей, оформление): хранятся рядом с остальными конфигами пользователя, не в демоне.
 class Prefs extends ChangeNotifier {
-  Prefs({this.closeToTray = true, this.startHidden = false, this.themeMode = 'system', this.accent = 0, this.amoled = false, this.compact = false, this.groupByCountry = true, this.file});
+  Prefs({this.closeToTray = true, this.startHidden = false, this.themeMode = 'system', this.accent = 0, this.amoled = false, this.compact = false, this.groupByCountry = true, this.welcomeDone = false, this.file});
 
   bool closeToTray; // крестик сворачивает в трей (иначе — выход)
   bool startHidden; // запускаться свёрнутым в трей
@@ -27,6 +27,7 @@ class Prefs extends ChangeNotifier {
   bool amoled; // чисто чёрный фон в тёмной теме
   bool compact; // плотный список узлов
   bool groupByCountry; // группировать список узлов по странам
+  bool welcomeDone; // мастер первого запуска пройден или пропущен
   Set<String> collapsed = {}; // свёрнутые группы списка узлов (код страны, '#own', '#none')
   Rect? windowBounds; // положение и размер окна, чтобы открываться там же, где закрыли
   final File? file;
@@ -61,6 +62,7 @@ class Prefs extends ChangeNotifier {
         amoled: j['amoled'] == true,
         compact: j['compact'] == true,
         groupByCountry: j['group_by_country'] != false,
+        welcomeDone: j['welcome_done'] == true,
         file: f,
       )
         ..collapsed = {for (final k in (j['collapsed_groups'] as List?) ?? const []) k.toString()}
@@ -70,7 +72,7 @@ class Prefs extends ChangeNotifier {
     }
   }
 
-  void update({bool? closeToTray, bool? startHidden, String? themeMode, int? accent, bool? amoled, bool? compact, bool? groupByCountry}) {
+  void update({bool? closeToTray, bool? startHidden, String? themeMode, int? accent, bool? amoled, bool? compact, bool? groupByCountry, bool? welcomeDone}) {
     this.closeToTray = closeToTray ?? this.closeToTray;
     this.startHidden = startHidden ?? this.startHidden;
     this.themeMode = themeMode ?? this.themeMode;
@@ -78,6 +80,7 @@ class Prefs extends ChangeNotifier {
     this.amoled = amoled ?? this.amoled;
     this.compact = compact ?? this.compact;
     this.groupByCountry = groupByCountry ?? this.groupByCountry;
+    this.welcomeDone = welcomeDone ?? this.welcomeDone;
     _save();
     notifyListeners();
   }
@@ -103,7 +106,7 @@ class Prefs extends ChangeNotifier {
     if (f == null) return;
     try {
       f.parent.createSync(recursive: true);
-      f.writeAsStringSync(jsonEncode({'close_to_tray': closeToTray, 'start_hidden': startHidden, 'theme_mode': themeMode, 'accent': accent, 'amoled': amoled, 'compact': compact, 'group_by_country': groupByCountry, 'collapsed_groups': collapsed.toList()..sort(), if (windowBounds != null) 'window': boundsToJson(windowBounds!)}));
+      f.writeAsStringSync(jsonEncode({'close_to_tray': closeToTray, 'start_hidden': startHidden, 'theme_mode': themeMode, 'accent': accent, 'amoled': amoled, 'compact': compact, 'group_by_country': groupByCountry, 'welcome_done': welcomeDone, 'collapsed_groups': collapsed.toList()..sort(), if (windowBounds != null) 'window': boundsToJson(windowBounds!)}));
     } catch (_) {}
   }
 }

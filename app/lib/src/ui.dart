@@ -8,6 +8,7 @@ import 'prefs.dart';
 import 'proxies_page.dart';
 import 'nodes_page.dart';
 import 'settings_page.dart';
+import 'welcome_page.dart';
 import 'widgets.dart';
 
 class VpnApp extends StatelessWidget {
@@ -97,6 +98,9 @@ class _ShellState extends State<Shell> {
       builder: (context, _) {
         // пока демон не готов, вкладки не показываем
         if (m.phase != Phase.ready) return Scaffold(body: SafeArea(child: HomePage(model: m)));
+        // первый запуск: мастер поверх оболочки, пока не пройден или не пропущен
+        final pf = widget.prefs;
+        if (pf != null && !pf.welcomeDone) return WelcomeFlow(model: m, onDone: () => pf.update(welcomeDone: true));
         // строится только активная вкладка: все пять разом (IndexedStack) перестраивались при каждом обновлении модели, а во время проверки
         // узлов оно приходит каждые несколько секунд; страницы сами запускают свои таймеры при появлении и гасят при уходе
         final pages = KeyedSubtree(

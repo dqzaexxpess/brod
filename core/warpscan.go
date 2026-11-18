@@ -185,14 +185,18 @@ func (c *Core) WarpScan(ctx context.Context, opt WarpScanOptions) ([]WarpScanRes
 			if err := c.rememberWarpProfile(best); err != nil {
 				return res, err
 			}
-			// подбор выбирает профиль по боковым пробам, а основной endpoint может его не принять (WARP тогда лежит минутами). Если прежний профиль в этом же подборе отвечал, помним его и откатываемся при провале первой проверки
+			// подбор выбирает профиль по боковым пробам, а основной endpoint может его не принять (WARP тогда лежит минутами). Если прежний профиль в этом же подборе отвечал, помним его и откатываемся при провале первой проверки.
+			// Так же, если в подборе он не ответил, но на этой сети WARP недавно работал именно на нём: подбор под нагрузкой мог его не увидеть
 			if cur := c.profileOf(); best != cur {
+				back := c.warpKnownGood()
 				for _, r := range res {
 					if r.OK && r.Profile == cur {
-						b, _ := json.Marshal(warpTrial{New: best, Prev: cur})
-						_ = c.st.SetSetting(settingWarpTrial, string(b))
-						break
+						back = true
 					}
+				}
+				if back {
+					b, _ := json.Marshal(warpTrial{New: best, Prev: cur})
+					_ = c.st.SetSetting(settingWarpTrial, string(b))
 				}
 			}
 			c.applyWarpProfile(best)
@@ -448,7 +452,15 @@ func (c *Core) warpAutoLoop(ctx context.Context) {
 				c.applyWarpProfile(p)
 				return // ядро будет пересоздано, новый цикл стартует вместе с ним
 			}
-			continue
+			if !c.warpRememberedBad() {
+				continue
+			}
+			// запомненный профиль не отвечает уже давно: без этого он держался бы за сетью вечно (на нём WARP не заработает, а подбор для сети
+			// с запомненным профилем не запускается). Забываем его и возвращаем умолчания
+			log.Printf("WARP: запомненный профиль %s не отвечает %s, возврат к умолчанию", p, warpRememberedBadAfter)
+			_ = c.st.SetSetting(warpNetKey(raw), "")
+			c.ResetWarpProfile()
+			return // ядро пересоздаётся
 		}
 		if !c.warpChecked.Load() || c.warpLastOK.Load() {
 			continue // проверки WARP ещё не было либо он отвечает на действующем профиле: подбирать нечего
@@ -462,6 +474,20 @@ func (c *Core) warpAutoLoop(ctx context.Context) {
 			log.Printf("WARP: подбор профиля: %v", err)
 		}
 	}
+}
+
+// warpRememberedBadAfter: сколько WARP должен быть признан упавшим, чтобы запомненный для сети профиль считался негодным.
+const warpRememberedBadAfter = 10 * time.Minute
+
+// warpRememberedBad: WARP на действующем профиле признан упавшим и не отвечает дольше warpRememberedBadAfter.
+func (c *Core) warpRememberedBad() bool {
+	if !c.warpDown.Load() {
+		return false
+	}
+	warpMemo.Lock()
+	r := warpMemo.m[c.warpMemoKey()]
+	warpMemo.Unlock()
+	return !r.downAt.IsZero() && time.Since(r.downAt) >= warpRememberedBadAfter && !r.okAt.After(r.downAt)
 }
 
 // warpTriedKey — ключ настройки со временем последнего подбора для сети (в базе только хэш идентификатора: он содержит адрес шлюза).

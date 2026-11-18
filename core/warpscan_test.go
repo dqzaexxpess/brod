@@ -319,3 +319,44 @@ func TestWarpTrialRollsBackWhenChosenProfileFails(t *testing.T) {
 		t.Fatalf("при удаче профиль должен остаться: %+v", p)
 	}
 }
+
+// Умолчание на сети отвечало, подбор под нагрузкой его не увидел и выбрал другой профиль. Раз на сети WARP недавно работал,
+// опыт ставится и без ответа прежнего профиля в подборе: провал первой проверки вернёт умолчание.
+func TestWarpScanSetsTrialWhenPrevWasKnownGood(t *testing.T) {
+	newP := WarpProfile{Endpoint: "8.34.146.9", Port: 1074, Mask: "none"}
+	c, _ := scanCore(t, func(p WarpProfile) prober.Result {
+		if p == newP {
+			return prober.Result{OK: true, LatencyMs: 100}
+		}
+		return prober.Result{Class: prober.ClassTimeout}
+	})
+	c.cfg.NetID = func() string { return "wifi:known-good" }
+	c.warpMemoSet(func(m *warpMemoRec) { m.okAt = time.Now() })
+	prev := c.profileOf()
+	if _, err := c.WarpScan(context.Background(), WarpScanOptions{Apply: true}); err != nil {
+		t.Fatal(err)
+	}
+	v, _, _ := c.st.Setting(settingWarpTrial)
+	var tr warpTrial
+	if json.Unmarshal([]byte(v), &tr) != nil || tr.New != newP || tr.Prev != prev {
+		t.Fatalf("опыт не поставлен: %q", v)
+	}
+}
+
+// Запомненный профиль, на котором WARP давно лежит, забывается: иначе он держится за сетью вечно.
+func TestWarpRememberedBad(t *testing.T) {
+	c, _ := scanCore(t, func(WarpProfile) prober.Result { return prober.Result{} })
+	c.cfg.NetID = func() string { return "wifi:bad" }
+	if c.warpRememberedBad() {
+		t.Fatal("WARP не падал, профиль негоден быть не может")
+	}
+	c.warpDown.Store(true)
+	c.warpMemoSet(func(m *warpMemoRec) { m.downAt = time.Now().Add(-warpRememberedBadAfter - time.Minute) })
+	if !c.warpRememberedBad() {
+		t.Fatal("WARP лежит дольше срока: профиль негоден")
+	}
+	c.warpMemoSet(func(m *warpMemoRec) { m.downAt = time.Now().Add(-time.Minute) })
+	if c.warpRememberedBad() {
+		t.Fatal("упал только что: рано")
+	}
+}

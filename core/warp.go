@@ -88,15 +88,20 @@ func (c *Core) warpMemoSet(f func(*warpMemoRec)) {
 	warpMemo.Unlock()
 }
 
+// warpKnownGood: на этой сети WARP недавно отвечал и с тех пор упавшим не признавался.
+func (c *Core) warpKnownGood() bool {
+	warpMemo.Lock()
+	r := warpMemo.m[c.warpMemoKey()]
+	warpMemo.Unlock()
+	return !r.okAt.IsZero() && time.Since(r.okAt) < warpKnownGoodWindow && !r.downAt.After(r.okAt)
+}
+
 // warpColdAndKnownGood: ядро молодое, а на этой сети WARP недавно отвечал и с тех пор упавшим не признавался.
 func (c *Core) warpColdAndKnownGood() bool {
 	if time.Since(c.startedAt) >= warpColdGrace {
 		return false
 	}
-	warpMemo.Lock()
-	r := warpMemo.m[c.warpMemoKey()]
-	warpMemo.Unlock()
-	return !r.okAt.IsZero() && time.Since(r.okAt) < warpKnownGoodWindow && !r.downAt.After(r.okAt)
+	return c.warpKnownGood()
 }
 
 const (
