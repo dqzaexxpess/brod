@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"sync"
@@ -230,35 +231,98 @@ func acceptable(q, resp []byte) bool {
 }
 
 // Serve поднимает локальный DNS-сервер (UDP, 127.0.0.1, свободный порт) с тем же запасным путём: запрос идёт в DNS сети, а если ответ отрицательный,
-// пустой или его нет, — в DoH. Нужен движку: у него один DNS на сеть, и на сетях со сломанным DNS (пустые ответы, молчание) узлы
+// пустой или его нет, — в DoH. Нужен движку: у него один DNS на сеть, и на сетях с сломанным DNS (пустые ответы, молчание) узлы
 // с доменным адресом не резолвятся, хотя тот же DoH до них достаёт. Движок указывает на этот адрес как на обычный UDP-сервер. Возвращает адрес и
 // функцию остановки.
+//
+// Сокет не должен пропадать: ошибка чтения не завершает цикл (на телефоне порт оставался без хозяина, и движок получал «connection refused» на каждый
+// запрос), сокет пересоздаётся на том же адресе.
 func Serve(primary func() string, doh []string) (addr string, stop func(), err error) {
-	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
+	s, err := serve(primary, doh)
 	if err != nil {
 		return "", nil, err
+	}
+	return s.addr, s.stop, nil
+}
+
+// Listen — то же, что Serve, но с признаком гибели: Done закрывается, если сервер остановился сам (сокет не удалось пересоздать). Вызывающий тогда
+// поднимает новый.
+func Listen(primary func() string, doh []string) (addr string, stop func(), done <-chan struct{}, err error) {
+	s, err := serve(primary, doh)
+	if err != nil {
+		return "", nil, nil, err
+	}
+	return s.addr, s.stop, s.done, nil
+}
+
+type server struct {
+	addr   string
+	mu     sync.Mutex
+	cur    net.PacketConn
+	cancel context.CancelFunc
+	done   chan struct{} // закрывается, когда цикл чтения вышел сам
+}
+
+func (s *server) conn() net.PacketConn {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.cur
+}
+
+func (s *server) stop() {
+	s.cancel()
+	_ = s.conn().Close()
+}
+
+func serve(primary func() string, doh []string) (*server, error) {
+	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		return nil, err
 	}
 	f := &fallback{primary: primary, doh: doh, hc: &http.Client{
 		Timeout:   dohTimeout,
 		Transport: &http.Transport{Proxy: nil, DisableKeepAlives: true, TLSHandshakeTimeout: dohTimeout},
 	}}
 	ctx, cancel := context.WithCancel(context.Background())
+	s := &server{addr: pc.LocalAddr().String(), cur: pc, cancel: cancel, done: make(chan struct{})}
 	go func() {
+		defer close(s.done)
 		buf := make([]byte, maxDNSMessage)
 		for {
-			n, from, err := pc.ReadFrom(buf)
+			c := s.conn()
+			n, from, err := c.ReadFrom(buf)
 			if err != nil {
-				return
+				if ctx.Err() != nil {
+					return
+				}
+				log.Printf("dnsfallback: чтение локального DNS: %v; сокет пересоздаётся", err)
+				_ = c.Close()
+				var np net.PacketConn
+				for try := 0; try < 30 && ctx.Err() == nil; try++ {
+					if np, err = net.ListenPacket("udp", s.addr); err == nil {
+						break
+					}
+					np = nil
+					time.Sleep(time.Duration(100*(1+min(try, 8))) * time.Millisecond)
+				}
+				if np == nil {
+					log.Printf("dnsfallback: локальный DNS остановлен: %v", err)
+					return
+				}
+				s.mu.Lock()
+				s.cur = np
+				s.mu.Unlock()
+				continue
 			}
 			q := append([]byte(nil), buf[:n]...)
 			go func() {
 				qctx, qcancel := context.WithTimeout(ctx, primaryTimeout+dohTimeout*time.Duration(len(doh)+1))
 				defer qcancel()
 				if resp := f.exchange(qctx, q); resp != nil {
-					_, _ = pc.WriteTo(resp, from)
+					_, _ = c.WriteTo(resp, from)
 				}
 			}()
 		}
 	}()
-	return pc.LocalAddr().String(), func() { cancel(); _ = pc.Close() }, nil
+	return s, nil
 }

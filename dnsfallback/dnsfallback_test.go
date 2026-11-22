@@ -225,3 +225,38 @@ func TestServeAnswersViaPrimaryThenDoH(t *testing.T) {
 		t.Fatalf("молчание сети не заменено DoH: %+v", r.Answers)
 	}
 }
+
+// Локальный сервер переживает потерянный сокет: после закрытия сокета снаружи (как при ошибке чтения) он пересоздаётся на том же порту.
+func TestServeRecreatesSocketAfterReadFailure(t *testing.T) {
+	good := fakeDNS(t, func(q dnsmessage.Message) []byte { return answer(q, dnsmessage.RCodeSuccess, [4]byte{1, 2, 3, 4}) })
+	s, err := serve(func() string { return good }, nil)
+	if err != nil {
+		t.Skip("нет loopback UDP:", err)
+	}
+	defer s.stop()
+	ask := func() error {
+		qn := dnsmessage.MustNewName("x.example.")
+		m := dnsmessage.Message{Header: dnsmessage.Header{ID: 7, RecursionDesired: true}, Questions: []dnsmessage.Question{{Name: qn, Type: dnsmessage.TypeA, Class: dnsmessage.ClassINET}}}
+		b, _ := m.Pack()
+		c, err := net.Dial("udp", s.addr)
+		if err != nil {
+			return err
+		}
+		defer c.Close()
+		_ = c.SetDeadline(time.Now().Add(4 * time.Second))
+		if _, err := c.Write(b); err != nil {
+			return err
+		}
+		buf := make([]byte, 4096)
+		_, err = c.Read(buf)
+		return err
+	}
+	if err := ask(); err != nil {
+		t.Fatalf("до сбоя: %v", err)
+	}
+	_ = s.conn().Close() // сокет пропал
+	time.Sleep(600 * time.Millisecond)
+	if err := ask(); err != nil {
+		t.Fatalf("после потери сокета ответа нет: %v", err)
+	}
+}

@@ -287,6 +287,24 @@ class _ConnDetails extends StatelessWidget {
   final AppModel model;
   final ConnDto c;
 
+  /// Кнопки правил для соединения: что именно запомнить (процесс, домен, адрес, порт) и действие.
+  List<Widget> _offers(BuildContext context, String caption, String action, IconData icon) => [
+        const SizedBox(height: 12),
+        Text(caption, style: Theme.of(context).textTheme.bodySmall),
+        for (final o in connRuleOffers(c, action: action))
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              icon: Icon(icon),
+              label: Text(o.label),
+              onPressed: () {
+                model.sendConnRule(o, action);
+                Navigator.pop(context);
+              },
+            ),
+          ),
+      ];
+
   @override
   Widget build(BuildContext context) {
     Widget row(String k, String v) => Padding(
@@ -306,22 +324,8 @@ class _ConnDetails extends StatelessWidget {
         if (c.process.isNotEmpty) row('Процесс', c.process),
         row('Трафик', '↓ ${fmtBytes(c.down)}   ↑ ${fmtBytes(c.up)}'),
         row('Открыто', '${fmtAge(c.started)} назад${c.open ? '' : ' (закрыто)'}'),
-        if (c.route != 'proxy' && connRuleOffers(c).isNotEmpty) ...[
-          const SizedBox(height: 12),
-          Text('Отправить через выход (VPN перезапустится):', style: Theme.of(context).textTheme.bodySmall),
-          for (final o in connRuleOffers(c))
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                icon: const Icon(Icons.alt_route),
-                label: Text(o.label),
-                onPressed: () {
-                  model.sendConnViaExit(o);
-                  Navigator.pop(context);
-                },
-              ),
-            ),
-        ],
+        if (c.route != 'proxy' && connRuleOffers(c).isNotEmpty) ..._offers(context, 'Отправить через выход (VPN перезапустится):', connViaExit, Icons.alt_route),
+        if (c.route != 'direct' && connRuleOffers(c, action: connDirect).isNotEmpty) ..._offers(context, 'Пускать напрямую, мимо VPN (VPN перезапустится):', connDirect, Icons.arrow_outward),
         if (c.open) ...[
           const SizedBox(height: 12),
           FilledButton.tonalIcon(

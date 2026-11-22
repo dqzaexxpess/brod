@@ -1,5 +1,12 @@
 import 'api.dart';
 
+/// Действие правила из журнала соединений: через выход (VPN) или напрямую, мимо него.
+const connViaExit = 'proxy';
+const connDirect = 'direct';
+
+/// Начало названия правила: по нему страница ищет противоположное правило для той же цели.
+String connRulePrefix(String action) => action == connDirect ? 'Напрямую: ' : 'Через выход: ';
+
 /// Способ отправить соединение через выход правилом: что именно запомнить (домен, адрес, порт с протоколом, процесс).
 class ConnRuleOffer {
   const ConnRuleOffer(this.label, this.title, this.match);
@@ -24,22 +31,23 @@ bool _isIp(String host) => RegExp(r'^\d{1,3}(\.\d{1,3}){3}$').hasMatch(host) || 
 
 /// Варианты правила «через выход» для соединения. Домен предпочтительнее адреса: адрес сервиса меняется, а голосовые серверы,
 /// у которых домена в соединении нет (Discord), ловятся протоколом и портом или процессом.
-List<ConnRuleOffer> connRuleOffers(ConnDto c) {
+List<ConnRuleOffer> connRuleOffers(ConnDto c, {String action = connViaExit}) {
+  final pre = connRulePrefix(action);
   final d = splitDest(c.dest);
   if (d == null) return const [];
   final out = <ConnRuleOffer>[];
   if (c.process.isNotEmpty) {
-    out.add(ConnRuleOffer('Весь трафик процесса ${c.process}', 'Через выход: ${c.process}', RouteMatch(processName: [c.process])));
+    out.add(ConnRuleOffer('Весь трафик процесса ${c.process}', '$pre${c.process}', RouteMatch(processName: [c.process])));
   }
   if (_isIp(d.host)) {
     final bits = d.host.contains(':') ? 128 : 32;
-    out.add(ConnRuleOffer('Адрес ${d.host}', 'Через выход: ${d.host}', RouteMatch(ipCidr: ['${d.host}/$bits'])));
+    out.add(ConnRuleOffer('Адрес ${d.host}', '$pre${d.host}', RouteMatch(ipCidr: ['${d.host}/$bits'])));
   } else {
-    out.add(ConnRuleOffer('Домен ${d.host} и поддомены', 'Через выход: ${d.host}', RouteMatch(domainSuffix: [d.host])));
+    out.add(ConnRuleOffer('Домен ${d.host} и поддомены', '$pre${d.host}', RouteMatch(domainSuffix: [d.host])));
   }
   final net = c.network.toLowerCase();
   if (net == 'tcp' || net == 'udp') {
-    out.add(ConnRuleOffer('${net.toUpperCase()}, порт ${d.port} (к любому адресу)', 'Через выход: ${net.toUpperCase()} ${d.port}', RouteMatch(network: net, port: [d.port])));
+    out.add(ConnRuleOffer('${net.toUpperCase()}, порт ${d.port} (к любому адресу)', '$pre${net.toUpperCase()} ${d.port}', RouteMatch(network: net, port: [d.port])));
   }
   return out;
 }

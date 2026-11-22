@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -430,7 +431,11 @@ func udpDNS(ctx context.Context, server, name string) ReportDNS {
 	var d net.Dialer
 	cctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	conn, err := d.DialContext(cctx, "udp", net.JoinHostPort(server, "53"))
+	target := server
+	if _, _, err := net.SplitHostPort(server); err != nil {
+		target = net.JoinHostPort(server, "53")
+	}
+	conn, err := d.DialContext(cctx, "udp", target)
 	if err != nil {
 		out.Err = prober.Sanitize(err.Error())
 		return out
@@ -537,6 +542,16 @@ func (c *Core) reportDNS(ctx context.Context, r *Report) {
 				x := udpDNS(ctx, sys, j.name)
 				x.Name = j.label
 				add(x)
+			}
+			// локальный DNS-прокси Brod (Android): через него движок резолвит имена узлов; если он не отвечает, это ошибка Brod, а не сети
+			if runtime.GOOS == "android" {
+				if host, port, ok := localDNSProxy(); ok {
+					x := udpDNS(ctx, net.JoinHostPort(host, strconv.Itoa(port)), j.name)
+					x.Resolver, x.Name = "local-proxy", j.label
+					add(x)
+				} else {
+					add(ReportDNS{Resolver: "local-proxy", Name: j.label, Err: "прокси не запущен"})
+				}
 			}
 			for _, d := range []struct{ url, label string }{{"https://1.1.1.1/dns-query", "doh-1.1.1.1"}, {"https://8.8.8.8/dns-query", "doh-8.8.8.8"}} {
 				x := dohDNS(ctx, d.url, d.label, j.name)
@@ -748,6 +763,9 @@ func reportFindings(r *Report) []string {
 		out = append(out, "Системный DNS отдаёт подменённые адреса (частные, loopback или нулевые) на известные имена: DNS подменяется.")
 	case sysTotal > 0 && ratio(sysOK, sysTotal) < 0.5 && ratio(dohOK, dohTotal) >= 0.5:
 		out = append(out, fmt.Sprintf("Системный DNS не отвечает нормально на известные имена (%d из %d), а DoH работает: DNS сети режется или ломается.", sysOK, sysTotal))
+	}
+	if pOK, pTotal, _ := count("local-proxy", false); pTotal > 0 && ratio(pOK, pTotal) < 0.5 && ratio(dohOK, dohTotal) >= 0.5 {
+		out = append(out, fmt.Sprintf("Локальный DNS-прокси Brod не отвечает (%d из %d известных имён), хотя DoH работает: это ошибка программы, а не сети; имена узлов не резолвятся.", pOK, pTotal))
 	}
 	if nodeTotal > 0 && ratio(nodeOK, nodeTotal) < 0.5 && ratio(sysOK, sysTotal) >= 0.5 {
 		out = append(out, fmt.Sprintf("Имена узлов системным DNS не резолвятся (%d из %d), а известные имена резолвятся: узлы с доменом будут мёртвы, живы только узлы с IP.", nodeOK, nodeTotal))

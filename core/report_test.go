@@ -296,3 +296,21 @@ func TestReportTextCompressesSources(t *testing.T) {
 		t.Error("в тексте больше 12 источников")
 	}
 }
+
+func TestReportFindingsLocalProxyDown(t *testing.T) {
+	known := []string{"a", "b", "c", "d"}
+	var r Report
+	r.Warp = ReportWarp{Enabled: true, ProbeOK: true}
+	r.DNS = append(r.DNS, dnsRows("system", known, true, "public")...)
+	r.DNS = append(r.DNS, dnsRows("local-proxy", known, false, "")...)
+	r.DNS = append(r.DNS, dnsRows("doh-1.1.1.1", known, true, "public")...)
+	if f := reportFindings(&r); !reportHas(f, "Локальный DNS-прокси Brod не отвечает") {
+		t.Errorf("падение прокси не замечено: %v", f)
+	}
+	r.DNS = nil
+	r.DNS = append(r.DNS, dnsRows("local-proxy", known, true, "public")...)
+	r.DNS = append(r.DNS, dnsRows("doh-1.1.1.1", known, true, "public")...)
+	if f := reportFindings(&r); reportHas(f, "Локальный DNS-прокси") {
+		t.Errorf("прокси работает, а вывод есть: %v", f)
+	}
+}

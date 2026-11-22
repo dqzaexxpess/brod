@@ -3,7 +3,7 @@
 package buildinfo
 
 // Version — номер версии демона и CLI (без платформы).
-const Version = "0.4.4"
+const Version = "0.4.5"
 
 // Version — единственный источник номера версии: им пользуются brodd, ядро Android, ресурсы Windows,
 // и в той же версии (X.Y.Z) выпускается приложение: app/pubspec.yaml `version: X.Y.Z+N` (N — номер сборки, на Android versionCode, при

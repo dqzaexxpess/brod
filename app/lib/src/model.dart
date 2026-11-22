@@ -562,14 +562,24 @@ class AppModel extends ChangeNotifier {
   }
 
   /// Правило «через выход» из журнала соединений: ставится первым, чтобы сработало раньше прежних; VPN перезапускается и применяет его.
-  Future<bool> sendConnViaExit(ConnRuleOffer o) async {
+  Future<bool> sendConnViaExit(ConnRuleOffer o) => sendConnRule(o, connViaExit);
+
+  /// Правило «напрямую» из журнала соединений: то же, но мимо VPN.
+  Future<bool> sendConnDirect(ConnRuleOffer o) => sendConnRule(o, connDirect);
+
+  /// Правило из журнала соединений с действием [action] (proxy | direct). Противоположное правило для той же цели («Через выход: X» против
+  /// «Напрямую: X») убирается: оно оказалось бы под новым и никогда не сработало.
+  Future<bool> sendConnRule(ConnRuleOffer o, String action) async {
     if (!rulesDirty) await loadRules(); // несохранённые правки страницы правил не затираем: правило добавляется к ним и сохраняется вместе
     if (rules.any((r) => r.title == o.title)) {
       toast = 'Такое правило уже есть';
       _notify();
       return true;
     }
-    rules = [RouteRuleDto(title: o.title, action: 'proxy', match: o.match), ...rules];
+    final other = connRulePrefix(action == connDirect ? connViaExit : connDirect);
+    final mine = connRulePrefix(action);
+    final twin = o.title.startsWith(mine) ? '$other${o.title.substring(mine.length)}' : null;
+    rules = [RouteRuleDto(title: o.title, action: action, match: o.match), ...rules.where((r) => r.title != twin)];
     rulesDirty = true;
     return saveRules();
   }
