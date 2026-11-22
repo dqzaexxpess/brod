@@ -779,6 +779,74 @@ class AppModel extends ChangeNotifier {
   List<WarpScanResultDto>? warpScanResults;
   bool warpScanning = false;
 
+  // ---- диагностический отчёт ----
+
+  /// Ход и итог отчёта ядра (null — ещё не запускался в этом сеансе).
+  ReportStateDto? report;
+  String? reportDevice; // Android: модель, версия системы, оболочка, батарея, DNS сети
+  bool reportRunning = false;
+
+  /// Запускает отчёт ядра и ждёт итога: опрос раз в 2 секунды (потолок самого ядра — 100 секунд).
+  Future<void> runReport() async {
+    if (reportRunning) return;
+    reportRunning = true;
+    report = null;
+    _notify();
+    try {
+      if (Platform.isAndroid) {
+        try {
+          reportDevice = await AndroidCore.deviceInfo();
+        } catch (_) {
+          reportDevice = null;
+        }
+      }
+      await api.reportStart();
+      final deadline = DateTime.now().add(const Duration(seconds: 150));
+      while (DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(seconds: 2));
+        final s = await api.reportState();
+        report = s;
+        _notify();
+        if (!s.running) break;
+      }
+    } on ApiException catch (e) {
+      _fail(e.message);
+    } catch (e) {
+      _fail('$e');
+    }
+    reportRunning = false;
+    _notify();
+  }
+
+  /// Файл отчёта для ПК: устройство, тесты, хвост журнала движка и JSON. На Android то же собирает системная часть (shareReport).
+  Future<String> saveReport() async {
+    final r = report;
+    if (r == null || !r.done) throw const FormatException('отчёта ещё нет');
+    var log = '';
+    try {
+      log = (await api.engineLog(n: 400)).join('\n');
+    } catch (_) {}
+    final b = StringBuffer()
+      ..writeln('Отчёт собран: ${DateTime.now().toIso8601String()} (время устройства)')
+      ..writeln()
+      ..writeln('== Устройство ==')
+      ..writeln('${Platform.operatingSystem} ${Platform.operatingSystemVersion}')
+      ..writeln()
+      ..write(r.text)
+      ..writeln()
+      ..writeln('== журнал движка (хвост) ==')
+      ..writeln(log)
+      ..writeln()
+      ..writeln('== JSON ==')
+      ..writeln(const JsonEncoder.withIndent('  ').convert(r.json));
+    final home = Platform.environment['USERPROFILE'] ?? Platform.environment['HOME'] ?? Directory.systemTemp.path;
+    final d = DateTime.now();
+    String two(int v) => v.toString().padLeft(2, '0');
+    final f = File('$home${Platform.pathSeparator}brod-report-${Platform.operatingSystem}-${d.year}${two(d.month)}${two(d.day)}-${two(d.hour)}${two(d.minute)}.txt');
+    await f.writeAsString(b.toString());
+    return f.path;
+  }
+
   Future<void> loadWarp() async {
     try {
       warpState = await api.warpState();

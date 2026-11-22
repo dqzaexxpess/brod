@@ -28,6 +28,8 @@ var routeAccess = map[string]string{
 	"GET /v1/backup":                                accessOwner,
 	"POST /v1/backup":                               accessOwner,
 	"POST /v1/diagnostics":                          accessOwner,
+	"POST /v1/report":                               accessOwner,
+	"GET /v1/report":                                accessOwner,
 	"GET /v1/traffic":                               accessOwner,
 	"GET /v1/traffic/daily":                         accessOwner,
 	"POST /v1/connect-best":                         accessOwner,

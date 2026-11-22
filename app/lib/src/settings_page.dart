@@ -9,6 +9,7 @@ import 'model.dart';
 import 'platform_text.dart';
 import 'own_page.dart';
 import 'prefs.dart';
+import 'report_page.dart';
 import 'rules_page.dart';
 import 'sources_page.dart';
 import 'user_sets_page.dart';
@@ -386,6 +387,7 @@ class _SettingsPageState extends State<SettingsPage> {
           ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Icons.restore), title: const Text('Восстановить из копии'), onTap: () => backupDialog(context, m, restore: true)),
           const Divider(height: 32),
           title('Диагностика'),
+          nav(Icons.fact_check_outlined, 'Диагностический отчёт', 'Тесты DNS, связи, WARP и узлов одной кнопкой; файл для разбора неполадок', () => push(ReportPage(model: m))),
           nav(Icons.travel_explore, 'Что видят сайты', 'Адрес, страна по нескольким базам, тип адреса, часовой пояс, IPv6, DNS', () => push(DiagnosticsPage(model: m))),
           if (Platform.isAndroid) ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Icons.share), title: const Text('Поделиться журналом'), subtitle: const Text('Файл для разбора неполадок'), onTap: AndroidCore.shareLogs),
         ];

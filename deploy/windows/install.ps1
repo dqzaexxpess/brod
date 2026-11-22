@@ -19,7 +19,7 @@
 # -RestrictPrivileges — урезать привилегии службы до перечня в $privs ниже. Без ключа служба получает полный набор LocalSystem. Перечень
 # составлен по коду, не по запуску: если после установки туннель не поднимается или не ставятся фильтры, ключ не использовать (повторная
 # установка без него возвращает полный набор).
-param([string]$Dir = (Join-Path $env:ProgramFiles 'Brod'), [string]$User = '', [switch]$RestrictPrivileges, [switch]$Update, [string]$Result = '', [string]$From = '', [string]$To = '', [string]$Version = '', [string]$Log = '')
+param([string]$Dir = (Join-Path $env:ProgramFiles 'Brod'), [string]$User = '', [switch]$RestrictPrivileges, [switch]$Update, [string]$Result = '', [string]$From = '', [string]$To = '', [string]$Version = '', [string]$Log = '', [int]$KeepPid = 0)
 $ErrorActionPreference = 'Stop'
 # -Log <файл> — протокол вывода (его читает установщик с оформлением Brod: строки показываются на странице хода установки)
 if ($Log) { try { Start-Transcript -Path $Log -Force | Out-Null } catch {} }
@@ -115,7 +115,11 @@ if (Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue) {
 }
 # процессы из каталога распаковки не трогаем: оттуда может работать окно самого установщика (Brod.exe --setup)
 $srcPrefix = if ((Resolve-Path $src).Path -ne (Resolve-Path -ErrorAction SilentlyContinue $Dir).Path) { (Resolve-Path $src).Path.TrimEnd('\') + '\' } else { $null }
+# -KeepPid — процесс окна установщика (Brod.exe --setup): его исключают по номеру, а не только по пути. Путь из %TEMP% бывает в короткой
+# форме 8.3 (C:\Users\ИВАНОВ~1\...; так при кириллице и длинном имени), а Get-Process отдаёт длинную: сравнение по префиксу тогда не
+# срабатывает, и установка убивала собственное окно (оно закрывалось без единого сообщения)
 Get-Process -Name brodd, vpnd, Brod, vpn_app -ErrorAction SilentlyContinue |
+    Where-Object { $_.Id -ne $KeepPid } |
     Where-Object { -not $srcPrefix -or -not $_.Path -or -not $_.Path.StartsWith($srcPrefix, [StringComparison]::OrdinalIgnoreCase) } |
     Stop-Process -Force # vpnd и vpn_app — прежние имена
 Start-Sleep -Seconds 1

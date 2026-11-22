@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import 'setup_args.dart';
+import 'setup_log.dart';
 import 'setup_runner.dart';
 
 /// Тёмная тема в цветах Brod (тот же исходный цвет и шрифт, что у приложения).
@@ -71,9 +72,18 @@ class _SetupWizardState extends State<SetupWizard> {
       if (mounted) setState(() => _lines.add(l));
     }
 
-    final out = _install
-        ? await widget.runner.install(account: _account.text.trim(), dir: widget.installDir, onLine: onLine)
-        : await widget.runner.uninstall(dir: widget.installDir, removeData: _removeData, onLine: onLine);
+    setupLog('${_install ? 'установка' : 'удаление'}: каталог ${widget.installDir}');
+    SetupOutcome out;
+    try {
+      out = _install
+          ? await widget.runner.install(account: _account.text.trim(), dir: widget.installDir, onLine: onLine)
+          : await widget.runner.uninstall(dir: widget.installDir, removeData: _removeData, onLine: onLine);
+    } catch (e, st) {
+      // PowerShell не запустился и т. п.: показать причину, а не оставить окно на странице хода
+      setupLog('шаг не выполнен: $e\n$st');
+      out = SetupOutcome(1, ['Не удалось запустить PowerShell: $e']);
+    }
+    setupLog('итог: код ${out.exitCode}${out.lines.isEmpty ? '' : ', последняя строка: ${out.lines.last}'}');
     if (!mounted) return;
     setState(() {
       _outcome = out;

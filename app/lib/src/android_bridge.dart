@@ -56,6 +56,12 @@ class AndroidCore {
   /// «Поделиться журналом»: хвосты core.log и engine.log.
   static Future<void> shareLogs() async => _ch.invokeMethod<void>('shareLogs');
 
+  /// Сведения об устройстве и сети (модель, версия системы, оболочка, батарея, DNS сети) для диагностического отчёта.
+  static Future<String> deviceInfo() async => (await _ch.invokeMethod<String>('deviceInfo')) ?? '';
+
+  /// Диагностический отчёт одним файлом (устройство, результаты тестов, хвосты журналов, JSON) в окно «Поделиться».
+  static Future<void> shareReport(String text, String json) async => _ch.invokeMethod<void>('shareReport', {'text': text, 'json': json});
+
   /// Системное окно «Поделиться» с текстом (ссылка на узел и т. п.).
   static Future<void> shareText(String title, String text) async => _ch.invokeMethod<void>('shareText', {'title': title, 'text': text});
 }

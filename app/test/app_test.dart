@@ -366,6 +366,15 @@ class FakeApi implements DaemonApi {
   @override
   Future<WarpStateDto> warpState() async => const WarpStateDto();
 
+  ReportStateDto reportNext = const ReportStateDto(state: 'idle');
+  int reportStarts = 0;
+
+  @override
+  Future<void> reportStart() async => reportStarts++;
+
+  @override
+  Future<ReportStateDto> reportState() async => reportNext;
+
   @override
   Future<List<WarpScanResultDto>> warpScan({bool apply = true, int stopAtGood = 0}) async => const [];
 

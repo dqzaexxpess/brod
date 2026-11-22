@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 //go:embed payload.zip
@@ -134,4 +135,42 @@ func defaultUser(env func(string) string) string {
 		return d + `\` + u
 	}
 	return u
+}
+
+// Журнал установки: загрузчик и окно (Brod.exe --setup) пишут в один файл. Загрузчик передаёт окну его путь (BROD_SETUP_LOG) и номер запуска
+// (BROD_SETUP_RUN); окно перед намеренным выходом пишет строку «UI-EXIT run=НОМЕР code=КОД». Если окно закрылось без такой строки, оно упало
+// или его завершили (антивирус, Stop-Process), и загрузчик говорит об этом, а не уходит молча.
+const (
+	envLog = "BROD_SETUP_LOG"
+	envRun = "BROD_SETUP_RUN"
+	// журнал старше этого размера обнуляется при запуске
+	maxLogSize = 256 << 10
+)
+
+func setupLogPath() string { return filepath.Join(os.TempDir(), "brod-setup.log") }
+
+// logLine дописывает строку с временем; ошибки записи молча игнорируются: журнал установке не нужен.
+func logLine(path, format string, a ...any) {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	fmt.Fprintf(f, "%s загрузчик: %s\n", time.Now().Format(time.RFC3339), fmt.Sprintf(format, a...))
+}
+
+// trimLog обнуляет слишком большой журнал.
+func trimLog(path string) {
+	if st, err := os.Stat(path); err == nil && st.Size() > maxLogSize {
+		_ = os.Remove(path)
+	}
+}
+
+// uiExited сообщает, записало ли окно намеренный выход для этого запуска.
+func uiExited(path, run string) bool {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	return strings.Contains(string(b), "UI-EXIT run="+run+" ")
 }

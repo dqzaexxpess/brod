@@ -7,8 +7,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -53,16 +55,38 @@ func run(args []string) int {
 		return exitPayload
 	}
 	defer os.RemoveAll(dir)
+	logPath := setupLogPath()
+	trimLog(logPath)
+	run := strconv.FormatInt(time.Now().UnixNano(), 10)
+	long := dir
+	if lp, err := longPath(dir); err == nil {
+		long = lp
+	}
+	logLine(logPath, "запуск %s, ОС %s, элевация %v, каталог распаковки %s (длинный путь %s)", run, osVersion(), windows.GetCurrentProcessToken().IsElevated(), dir, long)
 	ui := exec.Command(filepath.Join(dir, "Brod.exe"), "--setup")
 	ui.Dir = dir
-	if err := ui.Run(); err != nil {
+	ui.Env = append(os.Environ(), envLog+"="+logPath, envRun+"="+run)
+	started := time.Now()
+	err = ui.Run()
+	code := 0
+	if err != nil {
 		if ee, ok := err.(*exec.ExitError); ok {
-			return ee.ExitCode()
+			code = ee.ExitCode()
+		} else {
+			logLine(logPath, "окно не запустилось: %v", err)
+			msgBox("Установка Brod", "Не удалось открыть окно установки: "+err.Error()+"\n\nЖурнал: "+logPath)
+			return exitPayload
 		}
-		msgBox("Установка Brod", "Не удалось открыть окно установки: "+err.Error())
-		return exitPayload
 	}
-	return exitOK
+	logLine(logPath, "окно закрылось: код %d (0x%X), %s, намеренный выход: %v", code, uint32(code), time.Since(started).Round(time.Millisecond), uiExited(logPath, run))
+	if !uiExited(logPath, run) {
+		msgBox("Установка Brod", fmt.Sprintf("Окно установки закрылось неожиданно (код %d).\n\nЖурнал для разбора: %s", code, logPath))
+		if code == 0 {
+			return exitInstall
+		}
+		return code
+	}
+	return code
 }
 
 func silent(o options, args []string) int {
@@ -135,4 +159,24 @@ func msgBox(title, text string) {
 	t, _ := windows.UTF16PtrFromString(title)
 	x, _ := windows.UTF16PtrFromString(text)
 	windows.MessageBox(0, x, t, windows.MB_OK|windows.MB_ICONERROR)
+}
+
+// longPath разворачивает короткие имена 8.3 (C:\Users\ИВАНОВ~1\...) в длинные: по различию видно, что %TEMP% задан короткой формой.
+func longPath(p string) (string, error) {
+	src, err := windows.UTF16PtrFromString(p)
+	if err != nil {
+		return "", err
+	}
+	buf := make([]uint16, windows.MAX_LONG_PATH)
+	n, err := windows.GetLongPathName(src, &buf[0], uint32(len(buf)))
+	if err != nil || n == 0 || int(n) > len(buf) {
+		return "", fmt.Errorf("GetLongPathName: %v", err)
+	}
+	return windows.UTF16ToString(buf[:n]), nil
+}
+
+// osVersion — «10.0.22621» (RtlGetVersion не врёт о версии, в отличие от GetVersionEx).
+func osVersion() string {
+	v := windows.RtlGetVersion()
+	return fmt.Sprintf("%d.%d.%d", v.MajorVersion, v.MinorVersion, v.BuildNumber)
 }

@@ -86,6 +86,14 @@ void main() {
     expect(s, contains('exit 1223'));
     expect(s, contains("it''s"));
     expect(s, contains('-Log'));
+    expect(s, isNot(contains('Add-Content')), reason: 'без журнала ошибка запуска не пишется');
+  });
+
+  test('сценарий-запускающий: отказ UAC отличается от прочих ошибок, они попадают в журнал и дают код 1', () {
+    final s = WindowsSetupRunner.launcher(r'C:\s\install.ps1', [], null, diag: r"C:\Temp\brod-setup.log");
+    expect(s, contains('NativeErrorCode -eq 1223'));
+    expect(s, contains("Add-Content -LiteralPath 'C:\\Temp\\brod-setup.log'"));
+    expect(RegExp(r'exit 1\n\}').hasMatch(s), true, reason: 'любая другая ошибка запуска — код 1, а не «отказ UAC»');
   });
 
   testWidgets('установка: учётная запись уходит в скрипт, затем запуск Brod и выход', (t) async {

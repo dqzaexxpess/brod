@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -151,6 +152,8 @@ func (s *Server) routes(m *http.ServeMux) {
 	m.HandleFunc("GET /v1/backup", s.backupGet)
 	m.HandleFunc("POST /v1/backup", s.backupPost)
 	m.HandleFunc("POST /v1/diagnostics", s.diagnostics)
+	m.HandleFunc("POST /v1/report", s.reportStart)
+	m.HandleFunc("GET /v1/report", s.reportGet)
 	m.HandleFunc("GET /v1/traffic", s.traffic)
 	m.HandleFunc("GET /v1/traffic/daily", s.trafficDaily)
 	m.HandleFunc("POST /v1/connect-best", s.connectBest)
@@ -1673,4 +1676,33 @@ func (s *Server) uiState(w http.ResponseWriter, r *http.Request) {
 	}
 	uiVisible.Store(in.Visible)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// reportStart запускает диагностический отчёт в фоне (десятки секунд): состояние и итог — GET /v1/report.
+func (s *Server) reportStart(w http.ResponseWriter, r *http.Request) {
+	if !onlyUser(w, r) {
+		return
+	}
+	if err := s.core().StartReport(context.Background()); err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, 202, map[string]string{"state": "running"})
+}
+
+// reportGet отдаёт состояние отчёта; готовый приходит в report (структура) и text (то же читаемым текстом).
+func (s *Server) reportGet(w http.ResponseWriter, r *http.Request) {
+	if !onlyUser(w, r) {
+		return
+	}
+	st := s.core().ReportStatus()
+	out := map[string]any{"state": st.State, "stage": st.Stage}
+	if st.Error != "" {
+		out["error"] = st.Error
+	}
+	if st.Report != nil {
+		out["report"] = st.Report
+		out["text"] = st.Report.Text()
+	}
+	writeJSON(w, 200, out)
 }

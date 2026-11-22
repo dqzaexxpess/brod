@@ -1,11 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' show PlatformDispatcher;
 
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'setup_app.dart';
 import 'setup_args.dart';
+import 'setup_log.dart';
 import 'setup_runner.dart';
 
 String _join(String a, String b) => '$a${Platform.pathSeparator}$b';
@@ -88,13 +90,23 @@ void _removeStaleTemp(String own) {
 Future<void> runSetup(SetupArgs a) async {
   WidgetsFlutterBinding.ensureInitialized();
   final exeDir = File(Platform.resolvedExecutable).parent;
+  setupLog('окно ${a.mode.name}: ${Platform.resolvedExecutable}, pid $pid, ${Platform.operatingSystemVersion}, каталог ${a.installDir}');
+  // непойманная ошибка пишется в журнал (окно при ней закрывалось без объяснений)
+  FlutterError.onError = (d) {
+    setupLog('FlutterError: ${d.exceptionAsString()}\n${d.stack}');
+    FlutterError.presentError(d);
+  };
+  PlatformDispatcher.instance.onError = (e, st) {
+    setupLog('ошибка: $e\n$st');
+    return true;
+  };
 
   if (a.mode == SetupMode.uninstall && !a.fromTemp) {
     final tmp = Directory(_join(Directory.systemTemp.path, 'brod-uninstall-${DateTime.now().millisecondsSinceEpoch}'));
     await _copyDir(exeDir, tmp);
     await Process.start(_join(tmp.path, 'Brod.exe'), ['--uninstall', '--from-temp', '--install-dir', a.installDir.isEmpty ? exeDir.path : a.installDir],
         mode: ProcessStartMode.detached);
-    exit(0);
+    setupExit(0);
   }
 
   _removeStaleTemp(exeDir.path);
@@ -123,10 +135,10 @@ Future<void> runSetup(SetupArgs a) async {
   );
 
   // закрытие окна крестиком тоже выход: без этого процесс завершался, не дойдя до очистки
-  windowManager.addListener(_CloseListener(() => exit(0)));
+  windowManager.addListener(_CloseListener(() => setupExit(0)));
   await windowManager.setPreventClose(true);
 
-  void leave(int code) => exit(code);
+  void leave(int code) => setupExit(code);
 
   runApp(MaterialApp(
     debugShowCheckedModeBanner: false,

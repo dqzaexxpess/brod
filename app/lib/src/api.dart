@@ -1154,6 +1154,8 @@ abstract class DaemonApi {
   Future<String> warpImport(Map<String, dynamic> account, {bool replace = false}); // готовый warp-account.json
   Future<String> refreshSources();
   Future<String> checkNow();
+  Future<void> reportStart(); // диагностический отчёт: запуск в фоне, ход и итог — reportState()
+  Future<ReportStateDto> reportState();
   void close();
 }
 
@@ -1592,6 +1594,12 @@ class UnixApi implements DaemonApi {
   Future<WarpStateDto> warpState() async => WarpStateDto.fromJson(await _call('GET', '/v1/warp'));
 
   @override
+  Future<void> reportStart() async => _call('POST', '/v1/report');
+
+  @override
+  Future<ReportStateDto> reportState() async => ReportStateDto.fromJson(await _call('GET', '/v1/report'));
+
+  @override
   Future<List<WarpScanResultDto>> warpScan({bool apply = true, int stopAtGood = 0}) async {
     final r = await _call('POST', '/v1/warp/scan', {'apply': apply, 'stop_at_good': stopAtGood}, const Duration(minutes: 6));
     return [for (final x in (r['results'] as List? ?? const [])) WarpScanResultDto.fromJson(x as Map<String, dynamic>)];
@@ -1716,5 +1724,31 @@ class TgProxyList {
         items: [for (final e in (j['items'] as List? ?? const [])) TgProxyDto.fromJson(e as Map<String, dynamic>)],
         total: (j['total'] as num?)?.toInt() ?? 0,
         alive: (j['alive'] as num?)?.toInt() ?? 0,
+      );
+}
+
+
+/// Ход и итог диагностического отчёта ядра.
+class ReportStateDto {
+  const ReportStateDto({required this.state, this.stage = '', this.error = '', this.text = '', this.json = const {}});
+
+  final String state; // idle | running | done | failed
+  final String stage;
+  final String error;
+  final String text; // итог читаемым текстом
+  final Map<String, dynamic> json; // итог структурой
+
+  bool get running => state == 'running';
+  bool get done => state == 'done';
+
+  /// Выводы правил (первый раздел итога).
+  List<String> get findings => [for (final f in (json['findings'] as List? ?? const [])) '$f'];
+
+  factory ReportStateDto.fromJson(Map<String, dynamic> j) => ReportStateDto(
+        state: '${j['state'] ?? 'idle'}',
+        stage: '${j['stage'] ?? ''}',
+        error: '${j['error'] ?? ''}',
+        text: '${j['text'] ?? ''}',
+        json: (j['report'] as Map?)?.cast<String, dynamic>() ?? const {},
       );
 }

@@ -33,7 +33,7 @@ import (
 	"brod/supervisor"
 )
 
-// version: номер сборки и платформа (0.4.2-linux, 0.4.2-windows; у Android ядро в приложении называет себя 0.4.2-android). Подменяется при сборке: -ldflags "-X main.version=…".
+// version: номер сборки и платформа (0.4.3-linux, 0.4.3-windows; у Android ядро в приложении называет себя 0.4.3-android). Подменяется при сборке: -ldflags "-X main.version=…".
 var version = buildinfo.Version + "-" + runtime.GOOS
 
 func main() {

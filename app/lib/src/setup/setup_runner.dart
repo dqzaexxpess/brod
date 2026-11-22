@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'setup_log.dart';
+
 /// Итог шага установки или удаления.
 class SetupOutcome {
   const SetupOutcome(this.exitCode, this.lines);
@@ -81,14 +83,15 @@ class WindowsSetupRunner implements SetupRunner {
 
   @override
   Future<SetupOutcome> install({required String account, required String dir, required void Function(String line) onLine}) =>
-      _elevated('install.ps1', ['-Dir', dir, '-User', account], onLine);
+      _elevated('install.ps1', ['-Dir', dir, '-User', account, '-KeepPid', '$pid'], onLine);
 
   @override
   Future<SetupOutcome> uninstall({required String dir, required bool removeData, required void Function(String line) onLine}) =>
       _elevated('uninstall.ps1', ['-Dir', dir, if (removeData) '-RemoveState'], onLine, transcript: false);
 
-  /// Текст небольшого сценария-запускающего: поднимает powershell с правами администратора, ждёт и отдаёт его код возврата.
-  static String launcher(String script, List<String> args, String? log) {
+  /// Текст небольшого сценария-запускающего: поднимает powershell с правами администратора, ждёт и отдаёт его код возврата. Отказ в запросе UAC
+  /// (ошибка 1223) возвращается как 1223; любая другая ошибка запуска пишется в журнал [diag] и даёт код 1: раньше все они выглядели как «отклонён UAC».
+  static String launcher(String script, List<String> args, String? log, {String? diag}) {
     final all = <String>[
       '-NoProfile',
       '-ExecutionPolicy',
@@ -98,10 +101,15 @@ class WindowsSetupRunner implements SetupRunner {
       for (final a in args) '"$a"',
       if (log != null) ...['-Log', '"$log"'],
     ];
+    final note = diag == null ? '' : "  try { Add-Content -LiteralPath ${psQuote(diag)} -Value ('launcher: ' + \$e.GetType().FullName + ': ' + \$e.Message) -Encoding UTF8 } catch {}\n";
     return '''try {
   \$p = Start-Process -FilePath powershell.exe -ArgumentList @(${all.map(psQuote).join(',')}) -Verb RunAs -WindowStyle Hidden -Wait -PassThru
   exit \$p.ExitCode
-} catch { exit ${SetupOutcome.elevationDeclined} }
+} catch {
+  \$e = \$_.Exception
+  if (\$e -is [ComponentModel.Win32Exception] -and \$e.NativeErrorCode -eq ${SetupOutcome.elevationDeclined}) { exit ${SetupOutcome.elevationDeclined} }
+$note  exit 1
+}
 ''';
   }
 
@@ -110,7 +118,8 @@ class WindowsSetupRunner implements SetupRunner {
     final log = transcript ? '${work.path}${Platform.pathSeparator}install.log' : null;
     final launch = File('${work.path}${Platform.pathSeparator}launch.ps1');
     // UTF-8 с меткой: Windows PowerShell 5.1 без неё читает сценарий как ANSI, и кириллица в именах ломается
-    await launch.writeAsBytes([0xEF, 0xBB, 0xBF, ...utf8.encode(launcher('$scriptsDir${Platform.pathSeparator}$script', args, log))]);
+    await launch.writeAsBytes([0xEF, 0xBB, 0xBF, ...utf8.encode(launcher('$scriptsDir${Platform.pathSeparator}$script', args, log, diag: setupLogPath()))]);
+    setupLog('запуск $script от администратора; каталог скриптов $scriptsDir');
     final proc = await Process.start('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', launch.path], runInShell: false);
     unawaited(proc.stdout.drain<void>());
     unawaited(proc.stderr.drain<void>());
@@ -130,6 +139,7 @@ class WindowsSetupRunner implements SetupRunner {
     });
     final code = await proc.exitCode;
     timer.cancel();
+    setupLog('$script завершён, код $code');
     var lines = <String>[];
     if (log != null) {
       try {

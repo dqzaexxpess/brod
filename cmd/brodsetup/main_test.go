@@ -100,3 +100,26 @@ func TestDefaultUser(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+func TestUIExitedRecognisesOnlyOwnRun(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "log.txt")
+	if uiExited(p, "7") {
+		t.Fatal("журнала нет: выход не записан")
+	}
+	logLine(p, "запуск 7")
+	if uiExited(p, "7") {
+		t.Fatal("запись загрузчика не считается выходом окна")
+	}
+	if err := os.WriteFile(p, []byte("x UI-EXIT run=70 code=0\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if uiExited(p, "7") {
+		t.Fatal("чужой номер запуска (70) принят за свой (7)")
+	}
+	if err := os.WriteFile(p, []byte("x UI-EXIT run=7 code=1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if !uiExited(p, "7") {
+		t.Fatal("намеренный выход не распознан")
+	}
+}

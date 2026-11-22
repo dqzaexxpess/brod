@@ -199,6 +199,40 @@ class MainActivity : FlutterActivity() {
                 true
             }
 
+            // сведения об устройстве и сети для диагностического отчёта
+            "deviceInfo" -> result.success(DeviceInfo.collect(this))
+
+            // диагностический отчёт одним файлом: устройство, результаты тестов, хвосты журналов (с датой изменения: журналы накопительные) и JSON
+            "shareReport" -> background(result, "report") {
+                val dir = File(filesDir, "brod")
+                val shareDir = File(cacheDir, "share").apply { mkdirs() }
+                shareDir.listFiles { f -> f.name.startsWith("brod-report") }?.forEach { it.delete() }
+                val text = call.argument<String>("text") ?: ""
+                val json = call.argument<String>("json") ?: ""
+                val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.US).format(java.util.Date())
+                val who = "${Build.MANUFACTURER}-${Build.MODEL}".replace(Regex("[^A-Za-z0-9._-]"), "_")
+                val out = shareDir.resolve("brod-report-$who-$stamp.txt")
+                out.outputStream().use { o ->
+                    o.write("Отчёт собран: ${java.util.Date()} (время устройства)\n\n".toByteArray())
+                    o.write("== Устройство ==\n${DeviceInfo.collect(this)}\n".toByteArray())
+                    o.write(text.toByteArray())
+                    for (name in listOf("core.log", "engine.log")) {
+                        val f = File(dir, name)
+                        if (!f.exists()) continue
+                        val tail = Androidcore.sanitizedLog(dir.path, name, MAX_LOG.toLong())
+                        o.write("\n== $name (хвост; файл изменён ${java.util.Date(f.lastModified())}, размер ${f.length()} байт) ==\n".toByteArray())
+                        o.write(tail.toByteArray())
+                    }
+                    o.write("\n== JSON ==\n$json\n".toByteArray())
+                }
+                val uri = FileProvider.getUriForFile(this, "$packageName.share", out)
+                val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_STREAM, uri).putExtra(Intent.EXTRA_SUBJECT, "Отчёт Brod")
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                send.clipData = ClipData.newRawUri("", uri)
+                runOnUiThread { startActivity(Intent.createChooser(send, "Отправить отчёт")) }
+                true
+            }
+
             // установка скачанного обновления: файл уже проверен ядром по подписанному манифесту; здесь только передача системному установщику.
             // Без разрешения «устанавливать неизвестные приложения» открывается его страница в настройках и возвращается "permission".
             "installApk" -> {
