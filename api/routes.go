@@ -267,7 +267,7 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 		}
 		addr, _, _ := s.core().AppProxy()
 		out["app_proxy"] = addr
-		out["warp"] = map[string]bool{"enabled": st.WarpEnabled, "via_warp": st.ViaWarp}
+		out["warp"] = map[string]any{"enabled": st.WarpEnabled, "via_warp": st.ViaWarp, "down_min": st.WarpDownMin}
 		if st.NetMode != "" {
 			out["net_mode"] = st.NetMode
 		}

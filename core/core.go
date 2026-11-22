@@ -547,6 +547,7 @@ type Status struct {
 	WarpEnabled bool   // аккаунт WARP настроен
 	ViaWarp     bool   // проверки и новые подключения идут цепочкой через WARP
 	WarpDown    bool   // WARP не отвечает, цепочка временно отключена (ViaWarp при этом false)
+	WarpDownMin int    // сколько минут WARP признан упавшим (0 — не упал): долгий простой при рабочем TCP значит, что сеть не пропускает UDP
 	NetMode     string // режим мобильной сети: open, whitelist, offline; пусто — не определён (NetMode*)
 }
 
@@ -556,6 +557,7 @@ func (c *Core) Status() (Status, error) {
 	id := c.selected[store.ScopeActive]
 	c.mu.Unlock()
 	s := Status{NetID: c.cfg.NetID(), StartedAt: c.startedAt, WarpEnabled: c.warpOn, ViaWarp: c.viaWarp(), WarpDown: c.warpDown.Load(), NetMode: c.NetMode()}
+	s.WarpDownMin = c.warpDownMinutes()
 	var err error
 	if s.Nodes, s.Present, err = c.counts(); err != nil {
 		return s, err

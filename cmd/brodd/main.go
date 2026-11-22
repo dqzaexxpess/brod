@@ -33,7 +33,7 @@ import (
 	"brod/supervisor"
 )
 
-// version: номер сборки и платформа (0.4.3-linux, 0.4.3-windows; у Android ядро в приложении называет себя 0.4.3-android). Подменяется при сборке: -ldflags "-X main.version=…".
+// version: номер сборки и платформа (0.4.4-linux, 0.4.4-windows; у Android ядро в приложении называет себя 0.4.4-android). Подменяется при сборке: -ldflags "-X main.version=…".
 var version = buildinfo.Version + "-" + runtime.GOOS
 
 func main() {
@@ -80,6 +80,7 @@ func realMain() {
 		tunV6      = flag.Bool("tun-allow-ipv6", false, "разрешить IPv6 в TUN (по умолчанию блокируется)")
 		noDefault  = flag.Bool("no-default-sources", false, "не засевать источники по умолчанию (только --sources-file и добавленные пользователем)")
 		noNotify   = flag.Bool("no-notify", false, "не показывать уведомления рабочего стола")
+		noWarpAuto = flag.Bool("no-warp-register", false, "не регистрировать аккаунт WARP самому при первом запуске (по умолчанию регистрируется, как на Android)")
 		showVer    = flag.Bool("version", false, "показать версию")
 		ksRelease  = flag.Bool("release-killswitch", false, "снять правила киллсвитча (Linux: таблица inet brod_ks, Windows: фильтры WFP Brod) и выйти: аварийный выход, если демон упал при включённом VPN и трафик заблокирован")
 		ksStatus   = flag.Bool("killswitch-status", false, "показать правила киллсвитча со счётчиками и выйти")
@@ -231,6 +232,10 @@ func realMain() {
 		log.Printf("VPN выключен (режим %s; включить: brodctl vpn on)", st.Mode)
 	}
 
+	if !*noWarpAuto && runtime.GOOS != "android" {
+		go autoRegisterWarp(ctx, sup, *stateDir)
+	}
+
 	hup := make(chan os.Signal, 1)
 	signal.Notify(hup, syscall.SIGHUP)
 	for {
@@ -271,6 +276,33 @@ func realMain() {
 }
 
 // removeSocket удаляет файл сокета; пока его держит закрывающийся слушатель (Windows), пробует ещё до секунды.
+// autoRegisterWarp создаёт аккаунт WARP при первом запуске, если его нет (на Android это делает ядро приложения). Без аккаунта проверки узлов идут
+// напрямую, и живо около 1–2% узлов, а с цепочкой через WARP — заметно больше. Не больше одной попытки в сутки: недоступный
+// API не должен тормозить каждый запуск. Ядро после регистрации пересоздаётся: аккаунт читается при его создании.
+func autoRegisterWarp(ctx context.Context, sup *supervisor.Supervisor, dir string) {
+	select {
+	case <-ctx.Done():
+		return
+	case <-time.After(15 * time.Second): // сеть после загрузки системы поднимается не сразу
+	}
+	if sup.Core().WarpEnabled() {
+		return
+	}
+	mark := filepath.Join(dir, "warp-register.try")
+	if st, err := os.Stat(mark); err == nil && time.Since(st.ModTime()) < 24*time.Hour {
+		return
+	}
+	_ = os.WriteFile(mark, nil, 0o600)
+	if err := sup.Core().RegisterWarp(ctx, false); err != nil {
+		log.Printf("WARP: автоматическая регистрация не удалась: %v", err)
+		return
+	}
+	log.Printf("WARP: аккаунт зарегистрирован")
+	if _, err := sup.Restart(); err != nil {
+		log.Printf("WARP: аккаунт сохранён, но ядро не перезапустилось: %v", err)
+	}
+}
+
 func removeSocket(path string) {
 	for i := 0; i < 10; i++ {
 		if err := os.Remove(path); err == nil || os.IsNotExist(err) {

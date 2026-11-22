@@ -419,7 +419,12 @@ func engineConfig(c *Config, user, pass string, acc *warp.Account) ([]byte, erro
 		applyTUN(cfg, c.TUN)
 	} else if runtime.GOOS == "android" {
 		// без TUN движок берёт DNS из /etc/resolv.conf, а на Android его нет: запросы шли бы на [::1]:53 и не работали (ни имена узлов, ни WARP)
-		if d := SystemDNS(); d != "" {
+		// вместо прямого DNS сети движок получает локальный сервер с запасным путём через DoH: на сетях со сломанным DNS (пустые ответы, молчание)
+		// узлы с доменным адресом иначе не резолвятся. Нет прокси (не открылся loopback) — как раньше, DNS сети напрямую
+		if host, port, ok := localDNSProxy(); ok {
+			cfg["dns"] = map[string]any{"servers": []any{map[string]any{"type": "udp", "tag": "local", "server": host, "server_port": port}}, "final": "local"}
+			cfg["route"].(map[string]any)["default_domain_resolver"] = "local"
+		} else if d := SystemDNS(); d != "" {
 			cfg["dns"] = map[string]any{"servers": []any{map[string]any{"type": "udp", "tag": "local", "server": d}}, "final": "local"}
 			cfg["route"].(map[string]any)["default_domain_resolver"] = "local"
 		}

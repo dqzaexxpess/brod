@@ -4,6 +4,7 @@ import (
 	"brod/store"
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"strings"
 	"testing"
@@ -245,5 +246,53 @@ func TestReportNodesFromRecordedProbes(t *testing.T) {
 	}
 	if _, ok := by["ss"]; ok {
 		t.Error("протокол назван по nodes.proto, а не по классу")
+	}
+}
+
+func TestReportFindingsNewRules(t *testing.T) {
+	// проба WARP не уложилась, но пробы узлов через WARP проходят: тревоги про поломку нет
+	r := Report{Warp: ReportWarp{Enabled: true, ProbeOK: false, ProbeClass: "timeout"},
+		Samples: []ReportSample{{Proto: "vless", Mode: "via-warp", OK: true}, {Proto: "vless", Mode: "via-warp"}}}
+	f := reportFindings(&r)
+	if reportHas(f, "WARP не ответил") || !reportHas(f, "холодный старт") {
+		t.Errorf("ложная тревога про WARP: %v", f)
+	}
+
+	// сеть без UDP: TCP есть, WARP не работает, прямой WireGuard молчит
+	r = Report{Warp: ReportWarp{Enabled: true, ProbeOK: false, ProbeClass: "timeout"},
+		Conn:    []ReportConn{{Test: "tcp 1.1.1.1:443", OK: true}},
+		Samples: []ReportSample{{Proto: "wireguard", Mode: "direct"}, {Proto: "wireguard", Mode: "direct"}, {Proto: "vless", Mode: "via-warp"}}}
+	if f = reportFindings(&r); !reportHas(f, "не пропускает UDP") {
+		t.Errorf("сеть без UDP не замечена: %v", f)
+	}
+	// то же, но WireGuard живёт: UDP проходит
+	r.Samples[0].OK = true
+	if f = reportFindings(&r); reportHas(f, "не пропускает UDP") {
+		t.Errorf("UDP проходит, а вывод есть: %v", f)
+	}
+
+	// проверок не было
+	r = Report{Warp: ReportWarp{Enabled: true, ProbeOK: true}, Nodes: []ReportNodes{{Proto: "vless", Checked: map[string]int{}}}}
+	if f = reportFindings(&r); !reportHas(f, "Подождите 5–10 минут") {
+		t.Errorf("нет подсказки про ожидание: %v", f)
+	}
+	r.Nodes[0].Checked["via-warp"] = 12
+	if f = reportFindings(&r); reportHas(f, "Подождите 5–10 минут") {
+		t.Errorf("проверки были, а подсказка про ожидание осталась: %v", f)
+	}
+}
+
+func TestReportTextCompressesSources(t *testing.T) {
+	r := &Report{}
+	for i := 0; i < 90; i++ {
+		r.Sources = append(r.Sources, ReportSource{Name: fmt.Sprintf("s%d", i), Enabled: true})
+	}
+	r.Sources = append(r.Sources, ReportSource{Name: "big", Enabled: true, OK: true, Count: 500})
+	txt := r.Text()
+	if !strings.Contains(txt, "всего 91, загружено 1, не загрузилось 90") || !strings.Contains(txt, "big: узлов=500") {
+		t.Errorf("сводка по источникам:\n%s", txt)
+	}
+	if strings.Count(txt, "последняя удачная загрузка") > 12 {
+		t.Error("в тексте больше 12 источников")
 	}
 }

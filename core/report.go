@@ -767,8 +767,23 @@ func reportFindings(r *Report) []string {
 	if tcpTotal > 0 && tcpOK == 0 {
 		out = append(out, "Нет прямого TCP до публичных адресов (1.1.1.1, 8.8.8.8, 9.9.9.9 на 443): прямой интернет в этой сети ограничен или программе закрыт доступ к сети.")
 	}
-	if r.Warp.Enabled && !r.Warp.ProbeOK {
-		out = append(out, fmt.Sprintf("WARP не ответил на пробу (%s): узлы будут проверяться без цепочки, живых будет очень мало.", r.Warp.ProbeClass))
+	// пробы узлов через WARP: сколько прошло (канселированные не считаются)
+	warpSamples, warpSamplesOK := 0, 0
+	for _, sm := range r.Samples {
+		if sm.Mode == "via-warp" && sm.Class != string(prober.ClassCanceled) {
+			warpSamples++
+			if sm.OK {
+				warpSamplesOK++
+			}
+		}
+	}
+	switch {
+	case r.Warp.Enabled && !r.Warp.ProbeOK && warpSamplesOK > 0:
+		out = append(out, fmt.Sprintf("Проба WARP не уложилась по времени (%s), но пробы узлов через WARP проходят: туннель стартует медленно (холодный старт), это не поломка.", orDash(r.Warp.ProbeClass)))
+	case r.Warp.Enabled && !r.Warp.ProbeOK:
+		out = append(out, fmt.Sprintf("WARP не ответил на пробу (%s): узлы будут проверяться без цепочки, живых будет очень мало.", orDash(r.Warp.ProbeClass)))
+	case r.Warp.Enabled && r.Warp.Down:
+		out = append(out, "WARP признан упавшим (цепочка отключена), хотя проба сейчас проходит: он мигает, сеть пропускает его нестабильно.")
 	}
 	if !r.Warp.Enabled {
 		out = append(out, "Аккаунт WARP не настроен: проверки узлов идут напрямую.")
@@ -816,6 +831,35 @@ func reportFindings(r *Report) []string {
 	}
 	if r.Countries.Total > 0 && ratio(r.Countries.Known, r.Countries.Total) < 0.5 {
 		out = append(out, fmt.Sprintf("Страна выхода известна лишь у %d из %d узлов с проверкой выхода.", r.Countries.Known, r.Countries.Total))
+	}
+	// сеть не пропускает UDP: TCP до публичных адресов есть, а WARP и прямой WireGuard (оба по UDP) не работают
+	directWG, directWGOK, wgChecked, wgAlive := 0, 0, 0, 0
+	for _, sm := range r.Samples {
+		if sm.Proto == "wireguard" && sm.Mode == "direct" && sm.Class != string(prober.ClassCanceled) {
+			directWG++
+			if sm.OK {
+				directWGOK++
+			}
+		}
+	}
+	for _, n := range r.Nodes {
+		if n.Proto == "wireguard" {
+			wgChecked, wgAlive = n.Checked["direct"], n.Alive["direct"]
+		}
+	}
+	warpBad := r.Warp.Enabled && (!r.Warp.ProbeOK || r.Warp.Down) && warpSamplesOK == 0
+	wgBad := (directWG >= 2 && directWGOK == 0) || (wgChecked >= 20 && wgAlive == 0)
+	if tcpOK > 0 && warpBad && wgBad {
+		out = append(out, "Сеть, похоже, не пропускает UDP: TCP до публичных адресов работает, а WARP и прямой WireGuard (оба по UDP) нет. Живых узлов будет очень мало. Проверьте на другой сети, например на мобильном интернете.")
+	}
+	checkedAll := 0
+	for _, n := range r.Nodes {
+		for _, v := range n.Checked {
+			checkedAll += v
+		}
+	}
+	if len(r.Nodes) > 0 && checkedAll == 0 {
+		out = append(out, "Проверок узлов в этой сети за 6 часов нет: программа только запущена или проверка не шла. Подождите 5–10 минут с открытым приложением и запустите тесты ещё раз; разбивка по протоколам ниже пока пустая.")
 	}
 	if len(out) == 0 {
 		out = append(out, "Явных проблем правила не нашли: смотрите исходные данные ниже.")
@@ -866,9 +910,23 @@ func (r *Report) Text() string {
 		}
 	}
 	fmt.Fprintf(&b, "страна выхода известна: %d из %d\n", r.Countries.Known, r.Countries.Total)
-	b.WriteString("\n== Источники ==\n")
+	// источников бывает сотня: в текст идёт сводка и 12 самых крупных, полный список остаётся в JSON
+	loaded, failed := 0, 0
 	for _, s := range r.Sources {
-		fmt.Fprintf(&b, "%s: включён=%v ок=%v узлов=%d живых=%d последняя удачная загрузка %d мин назад %s\n", s.Name, s.Enabled, s.OK, s.Count, s.Alive, s.AgeMin, s.Err)
+		if s.OK {
+			loaded++
+		} else if s.Enabled {
+			failed++
+		}
+	}
+	fmt.Fprintf(&b, "\n== Источники ==\nвсего %d, загружено %d, не загрузилось %d (полный список в JSON)\n", len(r.Sources), loaded, failed)
+	top := append([]ReportSource(nil), r.Sources...)
+	sort.SliceStable(top, func(i, j int) bool { return top[i].Count > top[j].Count })
+	for i, s := range top {
+		if i >= 12 || s.Count == 0 {
+			break
+		}
+		fmt.Fprintf(&b, "%s: узлов=%d живых=%d последняя удачная загрузка %d мин назад %s\n", s.Name, s.Count, s.Alive, s.AgeMin, s.Err)
 	}
 	b.WriteString("\n== DNS ==\n")
 	for _, d := range r.DNS {

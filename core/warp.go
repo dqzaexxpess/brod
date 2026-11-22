@@ -88,6 +88,20 @@ func (c *Core) warpMemoSet(f func(*warpMemoRec)) {
 	warpMemo.Unlock()
 }
 
+// warpDownMinutes: сколько полных минут WARP признан упавшим (0, если не упал или признак поставлен только что).
+func (c *Core) warpDownMinutes() int {
+	if !c.warpDown.Load() {
+		return 0
+	}
+	warpMemo.Lock()
+	r := warpMemo.m[c.warpMemoKey()]
+	warpMemo.Unlock()
+	if r.downAt.IsZero() {
+		return 0
+	}
+	return int(time.Since(r.downAt).Minutes())
+}
+
 // warpKnownGood: на этой сети WARP недавно отвечал и с тех пор упавшим не признавался.
 func (c *Core) warpKnownGood() bool {
 	warpMemo.Lock()

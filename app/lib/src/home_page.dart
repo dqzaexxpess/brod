@@ -100,6 +100,7 @@ class HomePage extends StatelessWidget {
       ],
       if (Platform.isAndroid) ...[const _BatteryNote()],
       if (model.status?.update != null) ...[const SizedBox(height: 16), UpdateBanner(model: model)],
+      if ((model.status?.warpEnabled ?? false) && (model.status?.warpDownMin ?? 0) >= 5) ...[const SizedBox(height: 16), _UdpNote(minutes: model.status!.warpDownMin)],
       if (!on && model.status?.netMode == 'whitelist') ...[const SizedBox(height: 16), const _WhitelistNote()],
       if ((model.notice ?? vpn?.error ?? '').isNotEmpty) ...[const SizedBox(height: 16), _Banner(text: model.notice ?? vpn!.error)],
       if (on && vpn?.killswitch == 'failed')
@@ -347,6 +348,32 @@ class _BatteryNoteState extends State<_BatteryNote> {
 }
 
 /// Оператор пропускает только разрешённые сайты (белые списки): обычные узлы, скорее всего, не заработают.
+/// WARP не отвечает уже несколько минут, а интернет есть: сеть, похоже, режет UDP (WARP и WireGuard идут по UDP). Живых узлов будет мало.
+class _UdpNote extends StatelessWidget {
+  const _UdpNote({required this.minutes});
+
+  final int minutes;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Card.filled(
+      color: cs.secondaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Icon(Icons.wifi_off, color: cs.onSecondaryContainer),
+          const SizedBox(width: 10),
+          Expanded(
+              child: Text(
+                  'WARP не отвечает уже $minutes мин. Похоже, эта сеть не пропускает UDP: живых узлов будет очень мало. Попробуйте другую сеть, например мобильную, или проверьте защиту от UDP-флуда в роутере.',
+                  style: TextStyle(color: cs.onSecondaryContainer))),
+        ]),
+      ),
+    );
+  }
+}
+
 class _WhitelistNote extends StatelessWidget {
   const _WhitelistNote();
 

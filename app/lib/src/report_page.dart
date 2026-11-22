@@ -28,6 +28,8 @@ class ReportPage extends StatelessWidget {
           body: ListView(padding: const EdgeInsets.all(16), children: [
             const Text('Тесты идут около минуты: проверка DNS (системный, DoH, через WARP), прямой связи, WARP и выборочных узлов каждого протокола. '
                 'Потом файл можно отправить разработчику. В нём нет адресов серверов, имён узлов и ключей.'),
+            const SizedBox(height: 8),
+            const Text('Запускайте через 10–15 минут после первого запуска приложения, с открытым экраном и выключенным VPN: сразу после установки проверки узлов ещё не прошли, и отчёт получится почти пустым.'),
             if (vpnOn) ...[
               const SizedBox(height: 12),
               Card.filled(

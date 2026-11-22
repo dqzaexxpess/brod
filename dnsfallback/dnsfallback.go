@@ -228,3 +228,37 @@ func acceptable(q, resp []byte) bool {
 	}
 	return true
 }
+
+// Serve поднимает локальный DNS-сервер (UDP, 127.0.0.1, свободный порт) с тем же запасным путём: запрос идёт в DNS сети, а если ответ отрицательный,
+// пустой или его нет, — в DoH. Нужен движку: у него один DNS на сеть, и на сетях со сломанным DNS (пустые ответы, молчание) узлы
+// с доменным адресом не резолвятся, хотя тот же DoH до них достаёт. Движок указывает на этот адрес как на обычный UDP-сервер. Возвращает адрес и
+// функцию остановки.
+func Serve(primary func() string, doh []string) (addr string, stop func(), err error) {
+	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		return "", nil, err
+	}
+	f := &fallback{primary: primary, doh: doh, hc: &http.Client{
+		Timeout:   dohTimeout,
+		Transport: &http.Transport{Proxy: nil, DisableKeepAlives: true, TLSHandshakeTimeout: dohTimeout},
+	}}
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		buf := make([]byte, maxDNSMessage)
+		for {
+			n, from, err := pc.ReadFrom(buf)
+			if err != nil {
+				return
+			}
+			q := append([]byte(nil), buf[:n]...)
+			go func() {
+				qctx, qcancel := context.WithTimeout(ctx, primaryTimeout+dohTimeout*time.Duration(len(doh)+1))
+				defer qcancel()
+				if resp := f.exchange(qctx, q); resp != nil {
+					_, _ = pc.WriteTo(resp, from)
+				}
+			}()
+		}
+	}()
+	return pc.LocalAddr().String(), func() { cancel(); _ = pc.Close() }, nil
+}

@@ -360,3 +360,24 @@ func TestWarpRememberedBad(t *testing.T) {
 		t.Fatal("упал только что: рано")
 	}
 }
+
+// Минуты простоя WARP для главного экрана: 0, пока он не упал; после признания упавшим считаются от момента признания.
+func TestWarpDownMinutes(t *testing.T) {
+	c, _ := scanCore(t, func(WarpProfile) prober.Result { return prober.Result{} })
+	c.cfg.NetID = func() string { return "wifi:down-min" }
+	if c.warpDownMinutes() != 0 {
+		t.Fatal("WARP не падал, а минуты есть")
+	}
+	c.warpDown.Store(true)
+	if c.warpDownMinutes() != 0 {
+		t.Fatal("момент падения не записан: минут быть не должно")
+	}
+	c.warpMemoSet(func(m *warpMemoRec) { m.downAt = time.Now().Add(-7*time.Minute - 10*time.Second) })
+	if got := c.warpDownMinutes(); got != 7 {
+		t.Fatalf("минут простоя %d, ждали 7", got)
+	}
+	c.warpDown.Store(false)
+	if c.warpDownMinutes() != 0 {
+		t.Fatal("WARP снова отвечает, а минуты остались")
+	}
+}

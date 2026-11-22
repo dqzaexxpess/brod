@@ -157,3 +157,71 @@ func TestAAAAEmptyIsAcceptable(t *testing.T) {
 		t.Fatal("пустой AAAA с NOERROR должен приниматься без запасного пути")
 	}
 }
+
+// Локальный сервер отвечает ответом сети, а на пустой ответ и молчание сети — ответом DoH.
+func TestServeAnswersViaPrimaryThenDoH(t *testing.T) {
+	var hits atomic.Int32
+	doh := fakeDoH(t, &hits, [4]byte{9, 9, 9, 9})
+	query := func(srv string, name string) dnsmessage.Message {
+		t.Helper()
+		qn := dnsmessage.MustNewName(name)
+		m := dnsmessage.Message{Header: dnsmessage.Header{ID: 0x4242, RecursionDesired: true}, Questions: []dnsmessage.Question{{Name: qn, Type: dnsmessage.TypeA, Class: dnsmessage.ClassINET}}}
+		b, _ := m.Pack()
+		c, err := net.Dial("udp", srv)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer c.Close()
+		_ = c.SetDeadline(time.Now().Add(8 * time.Second))
+		if _, err := c.Write(b); err != nil {
+			t.Fatal(err)
+		}
+		buf := make([]byte, 4096)
+		n, err := c.Read(buf)
+		if err != nil {
+			t.Fatalf("нет ответа: %v", err)
+		}
+		var r dnsmessage.Message
+		if err := r.Unpack(buf[:n]); err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
+	// сеть отвечает нормально: DoH не нужен
+	good := fakeDNS(t, func(q dnsmessage.Message) []byte { return answer(q, dnsmessage.RCodeSuccess, [4]byte{1, 2, 3, 4}) })
+	srv, stop, err := Serve(func() string { return good }, []string{doh})
+	if err != nil {
+		t.Skip("нет loopback UDP:", err)
+	}
+	defer stop()
+	r := query(srv, "ok.example.")
+	if len(r.Answers) != 1 || r.Answers[0].Body.(*dnsmessage.AResource).A != [4]byte{1, 2, 3, 4} || hits.Load() != 0 {
+		t.Fatalf("ответ сети: %+v, DoH вызван %d раз", r.Answers, hits.Load())
+	}
+	// сеть отдаёт пустой NOERROR: ответ берётся у DoH
+	emptyAns := fakeDNS(t, func(q dnsmessage.Message) []byte {
+		m := dnsmessage.Message{Header: dnsmessage.Header{ID: q.ID, Response: true}, Questions: q.Questions}
+		b, _ := m.Pack()
+		return b
+	})
+	srv2, stop2, err := Serve(func() string { return emptyAns }, []string{doh})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop2()
+	r = query(srv2, "node.example.")
+	if len(r.Answers) != 1 || r.Answers[0].Body.(*dnsmessage.AResource).A != [4]byte{9, 9, 9, 9} {
+		t.Fatalf("пустой ответ сети не заменён DoH: %+v", r.Answers)
+	}
+	// сеть молчит
+	silent := fakeDNS(t, func(dnsmessage.Message) []byte { return nil })
+	srv3, stop3, err := Serve(func() string { return silent }, []string{doh})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop3()
+	r = query(srv3, "quiet.example.")
+	if len(r.Answers) != 1 || r.Answers[0].Body.(*dnsmessage.AResource).A != [4]byte{9, 9, 9, 9} {
+		t.Fatalf("молчание сети не заменено DoH: %+v", r.Answers)
+	}
+}

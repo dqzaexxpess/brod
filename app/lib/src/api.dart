@@ -920,7 +920,7 @@ class UpdateBrief {
 }
 
 class DaemonStatus {
-  const DaemonStatus({required this.version, required this.nodes, required this.present, required this.degraded, this.active, this.warpEnabled = false, this.activity = const Activity(), this.update, this.netMode = '', this.vpn});
+  const DaemonStatus({required this.version, required this.nodes, required this.present, required this.degraded, this.active, this.warpEnabled = false, this.warpDownMin = 0, this.activity = const Activity(), this.update, this.netMode = '', this.vpn});
 
   final String version;
   final int nodes;
@@ -928,6 +928,7 @@ class DaemonStatus {
   final bool degraded;
   final ActiveNode? active;
   final bool warpEnabled;
+  final int warpDownMin; // сколько минут WARP не отвечает (0 — отвечает)
   final Activity activity;
   final UpdateBrief? update; // есть новая версия
   final String netMode; // режим мобильной сети: open, whitelist, offline; пусто — не определён
@@ -944,10 +945,11 @@ class DaemonStatus {
       other.degraded == degraded &&
       other.active == active &&
       other.warpEnabled == warpEnabled &&
+      other.warpDownMin == warpDownMin &&
       other.activity == activity;
 
   @override
-  int get hashCode => Object.hash(version, nodes, present, degraded, active, warpEnabled, activity, update, netMode);
+  int get hashCode => Object.hash(version, nodes, present, degraded, active, warpEnabled, warpDownMin, activity, update, netMode);
 
   factory DaemonStatus.fromJson(Map<String, dynamic> j) {
     final a = j['active'];
@@ -959,6 +961,7 @@ class DaemonStatus {
       present: (j['present'] as num?)?.toInt() ?? 0,
       degraded: d == true || (d is Map && d.isNotEmpty),
       warpEnabled: w is Map && w['enabled'] == true,
+      warpDownMin: w is Map ? (w['down_min'] as num?)?.toInt() ?? 0 : 0,
       netMode: (j['net_mode'] as String?) ?? '',
       vpn: j['vpn'] is Map<String, dynamic> ? VpnState.fromJson(j['vpn'] as Map<String, dynamic>) : null,
       activity: Activity.fromJson(j['activity']),

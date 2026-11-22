@@ -22,6 +22,7 @@ class _Api implements DaemonApi {
 }
 
 void main() {
+  udpTest();
   test('данные: итог отчёта читается из JSON ядра', () {
     final s = ReportStateDto.fromJson({
       'state': 'done',
@@ -60,5 +61,19 @@ void main() {
     await t.pump();
     expect(find.text('Выводы'), findsOneWidget);
     expect(find.text('Системный DNS не отвечает нормально'), findsOneWidget);
+  });
+}
+
+void udpTest() {
+  test('статус: минуты простоя WARP читаются из ответа демона', () {
+    final s = DaemonStatus.fromJson({
+      'version': '0.4.4',
+      'nodes': 1,
+      'present': 1,
+      'warp': {'enabled': true, 'via_warp': false, 'down_min': 12},
+    });
+    expect(s.warpEnabled, true);
+    expect(s.warpDownMin, 12);
+    expect(DaemonStatus.fromJson({'version': 'x', 'nodes': 0, 'present': 0}).warpDownMin, 0);
   });
 }
