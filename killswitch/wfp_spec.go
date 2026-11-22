@@ -242,3 +242,15 @@ func DescribeWFP(c WFPConfig) (string, error) {
 	}
 	return b.String(), nil
 }
+
+// Коды ошибок WFP «объекта нет»: FWP_E_FILTER_NOT_FOUND, FWP_E_PROVIDER_NOT_FOUND, FWP_E_SUBLAYER_NOT_FOUND.
+var wfpNotFoundCodes32 = map[uint32]bool{0x80320003: true, 0x80320005: true, 0x80320007: true}
+
+// wfpNotFound сообщает, что код возврата WFP означает «такого объекта нет». Функции WFP возвращают DWORD, а syscall отдаёт его как uintptr:
+// на части систем (по-видимому, Windows 11 25H2) старшие 32 бита приходят знаковым расширением (0xFFFFFFFF80320003), и сравнение целого значения с таблицей не срабатывало:
+// «объект не найден» превращалось в ошибку («не удалось снять правила: … The filter does not exist»), и киллсвитч не включался. Сравниваются
+// только младшие 32 бита.
+func wfpNotFound(r uintptr) bool { return wfpNotFoundCodes32[uint32(r)] }
+
+// wfpFailed сообщает, что код возврата WFP — ошибка (ненулевой DWORD); старшие 32 бита значения не учитываются.
+func wfpFailed(r uintptr) bool { return uint32(r) != 0 }

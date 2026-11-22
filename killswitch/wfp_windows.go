@@ -257,8 +257,8 @@ func (w *WFP) Status() (string, error) {
 				key := set.k.filter(bank, i)
 				var f *wtFwpmFilter0
 				r, _, _ := procFwpmFilterGetByKey0.Call(s, uintptr(unsafe.Pointer(&key)), uintptr(unsafe.Pointer(&f)))
-				if r != 0 {
-					if !wfpNotFoundCodes[r] {
+				if wfpFailed(r) {
+					if !wfpNotFound(r) {
 						return "", fmt.Errorf("FwpmFilterGetByKey0: 0x%08x (%v)", uint32(r), syscall.Errno(r))
 					}
 					continue
@@ -376,13 +376,12 @@ var (
 	procFwpmFilterDeleteByKey0    = modFwpuclnt.NewProc("FwpmFilterDeleteByKey0")
 	procFwpmFreeMemory0           = modFwpuclnt.NewProc("FwpmFreeMemory0")
 	procFwpmGetAppIdFromFileName0 = modFwpuclnt.NewProc("FwpmGetAppIdFromFileName0")
-	wfpNotFoundCodes              = map[uintptr]bool{0x80320003: true, 0x80320005: true, 0x80320007: true} // FWP_E_FILTER/PROVIDER/SUBLAYER_NOT_FOUND
 )
 
 // call вызывает функцию WFP (они возвращают код ошибки, 0 — успех).
 func call(name string, p *windows.LazyProc, args ...uintptr) error {
 	r, _, _ := p.Call(args...)
-	if r == 0 {
+	if !wfpFailed(r) {
 		return nil
 	}
 	return fmt.Errorf("%s: 0x%08x (%w)", name, uint32(r), syscall.Errno(r))
@@ -427,8 +426,8 @@ func transaction(s uintptr, f func() error) error {
 func exists(p *windows.LazyProc, s uintptr, key *windows.GUID) (bool, error) {
 	var obj unsafe.Pointer
 	r, _, _ := p.Call(s, uintptr(unsafe.Pointer(key)), uintptr(unsafe.Pointer(&obj)))
-	if r != 0 {
-		if wfpNotFoundCodes[r] {
+	if wfpFailed(r) {
+		if wfpNotFound(r) {
 			return false, nil
 		}
 		return false, fmt.Errorf("%s: 0x%08x (%w)", p.Name, uint32(r), syscall.Errno(r))

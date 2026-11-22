@@ -193,3 +193,23 @@ func TestDescribeWFP(t *testing.T) {
 		}
 	}
 }
+
+// Код «объекта нет» узнаётся и со знаковым расширением старших бит (по-видимому, так он приходил на Windows 11 25H2; причина выведена из текста ошибки, на устройстве не проверена): раньше сравнивалось целое значение,
+// и «фильтра нет» превращалось в ошибку снятия правил.
+func TestWFPNotFoundIgnoresHighBits(t *testing.T) {
+	// 64-битные значения собираются через переменные: на 32-битной сборке константа не влезла бы в uintptr
+	hi := func(v uint64) uintptr { return uintptr(v) }
+	for _, r := range []uintptr{0x80320003, hi(0xFFFFFFFF80320003), 0x80320005, hi(0xFFFFFFFF80320007)} {
+		if !wfpNotFound(r) {
+			t.Errorf("%#x: «не найдено» не распознано", r)
+		}
+	}
+	for _, r := range []uintptr{0, 0x5, hi(0xFFFFFFFF80320004), 0x80320001} {
+		if wfpNotFound(r) {
+			t.Errorf("%#x принят за «не найдено»", r)
+		}
+	}
+	if wfpFailed(0) || wfpFailed(hi(0xDEADBEEF00000000)) || !wfpFailed(0x5) || !wfpFailed(hi(0xFFFFFFFF80320003)) {
+		t.Error("wfpFailed: успех и ошибка различаются по младшим 32 битам")
+	}
+}
