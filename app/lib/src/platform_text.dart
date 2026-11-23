@@ -53,3 +53,13 @@ class KillswitchText {
   String get lockedExplanation =>
       'Пока VPN не включён снова, трафик блокируется. Блокировку можно снять: VPN останется выключенным.';
 }
+
+/// Строка об ОС для отчёта. На Windows 11 в реестре `ProductName` остаётся «Windows 10 …», поэтому по номеру сборки (22000 и выше) название исправляется.
+String osDescription(String os, String version) {
+  if (os == 'windows') {
+    final m = RegExp(r'Build (\d+)').firstMatch(version);
+    final build = m == null ? 0 : int.parse(m.group(1)!);
+    if (build >= 22000) version = version.replaceFirst('Windows 10', 'Windows 11');
+  }
+  return '$os $version';
+}

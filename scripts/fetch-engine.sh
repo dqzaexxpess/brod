@@ -8,8 +8,8 @@ cd "$(dirname "$0")/.."
 # Без перевода строк: на Windows с core.autocrlf=true исходники lx клонировались с CRLF, а копия sing из кэша Go оставалась с LF,
 # и патчи (в репозитории — LF, см. .gitattributes) переставали накладываться. Для всех вызовов git в этом скрипте, включая сабмодули.
 export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.autocrlf GIT_CONFIG_VALUE_0=false
-TAG=v1.14.4-lx.35
-COMMIT=f1bac271853eaf13398ce1030c948aebc3aed2e1
+TAG=v1.14.4-lx.36
+COMMIT=b5db574026d89c70136cb488a755da6398d6cfc8
 DIR=work/src/lx
 if [ ! -d "$DIR/.git" ]; then
   mkdir -p work/src

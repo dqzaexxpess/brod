@@ -13,6 +13,7 @@ import 'daemon_errors.dart';
 import 'opener.dart';
 import 'platform_paths.dart';
 import 'link_import.dart';
+import 'platform_text.dart';
 import 'private_file.dart';
 import 'timing.dart';
 
@@ -883,7 +884,7 @@ class AppModel extends ChangeNotifier {
       ..writeln('Отчёт собран: ${DateTime.now().toIso8601String()} (время устройства)')
       ..writeln()
       ..writeln('== Устройство ==')
-      ..writeln('${Platform.operatingSystem} ${Platform.operatingSystemVersion}')
+      ..writeln(osDescription(Platform.operatingSystem, Platform.operatingSystemVersion))
       ..writeln()
       ..write(r.text)
       ..writeln()

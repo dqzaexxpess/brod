@@ -30,4 +30,13 @@ void main() {
     expect(KillswitchText(Plat.android).summary, contains('Постоянный VPN'));
     expect(KillswitchText(Plat.windows).summary, contains('локальная сеть'));
   });
+
+  test('отчёт: Windows 11 определяется по номеру сборки, а не по названию из реестра', () {
+    expect(osDescription('windows', '"Windows 10 Pro" 10.0 (Build 22000)'), 'windows "Windows 11 Pro" 10.0 (Build 22000)');
+    expect(osDescription('windows', '"Windows 10 Pro" 10.0 (Build 26200)'), 'windows "Windows 11 Pro" 10.0 (Build 26200)');
+    expect(osDescription('windows', '"Windows 10 Pro" 10.0 (Build 19045)'), 'windows "Windows 10 Pro" 10.0 (Build 19045)', reason: 'настоящая «десятка» остаётся');
+    expect(osDescription('windows', '"Windows 11 Pro" 10.0 (Build 22631)'), 'windows "Windows 11 Pro" 10.0 (Build 22631)');
+    expect(osDescription('windows', 'что-то непонятное'), 'windows что-то непонятное');
+    expect(osDescription('linux', 'Linux 6.14'), 'linux Linux 6.14');
+  });
 }

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"unicode/utf16"
 )
 
 // Правила маршрутизации пользователя и профили (API /v1/route-rules, /v1/route-profiles).
@@ -198,10 +200,38 @@ func asList(v any) []map[string]any {
 
 // readArg читает файл или стандартный ввод («-»).
 func readArg(p string) ([]byte, error) {
+	var raw []byte
+	var err error
 	if p == "-" {
-		return io.ReadAll(os.Stdin)
+		raw, err = io.ReadAll(os.Stdin)
+	} else {
+		raw, err = os.ReadFile(p)
 	}
-	return os.ReadFile(p)
+	if err != nil {
+		return nil, err
+	}
+	return decodeText(raw), nil
+}
+
+// decodeText приводит содержимое файла к UTF-8 без метки порядка байт: Windows PowerShell 5.1 (`Out-File`, `-Encoding utf8`) и Блокнот ставят
+// метку UTF-8 (EF BB BF) или пишут UTF-16 (FF FE / FE FF), а разбор JSON такого начала не принимает.
+func decodeText(raw []byte) []byte {
+	switch {
+	case bytes.HasPrefix(raw, []byte{0xEF, 0xBB, 0xBF}):
+		return raw[3:]
+	case (bytes.HasPrefix(raw, []byte{0xFF, 0xFE}) || bytes.HasPrefix(raw, []byte{0xFE, 0xFF})) && len(raw)%2 == 0:
+		le := raw[0] == 0xFF
+		u := make([]uint16, 0, len(raw)/2-1)
+		for i := 2; i+1 < len(raw); i += 2 {
+			if le {
+				u = append(u, uint16(raw[i])|uint16(raw[i+1])<<8)
+			} else {
+				u = append(u, uint16(raw[i+1])|uint16(raw[i])<<8)
+			}
+		}
+		return []byte(string(utf16.Decode(u)))
+	}
+	return raw
 }
 
 // applied сообщает итог применения правил или профиля: перезапуск VPN мог не удаться.
