@@ -481,6 +481,9 @@ func (c *Core) Settings() (map[string]string, error) {
 	if _, set := all[SetFakeIP]; !set {
 		out[SetFakeIP] = "0"
 	}
+	if _, set := all[SetProxyLAN]; !set {
+		out[SetProxyLAN] = "0"
+	}
 	if _, set := all[SetOTASources]; !set {
 		out[SetOTASources] = "1"
 	}

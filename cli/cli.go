@@ -1245,14 +1245,28 @@ func (a *app) settings(args []string) error {
 }
 
 func (a *app) appProxy() error {
-	var m map[string]string
+	var m struct {
+		Addr     string   `json:"addr"`
+		Username string   `json:"username"`
+		Password string   `json:"password"`
+		LAN      bool     `json:"lan"`
+		LANAddrs []string `json:"lan_addrs"`
+		Port     int      `json:"port"`
+	}
 	if err := a.call("GET", "/v1/app-proxy", nil, &m); err != nil {
 		return err
 	}
 	if a.show(m) {
 		return nil
 	}
-	fmt.Fprintf(a.env.Out, "прокси (HTTP и SOCKS5): %s\nлогин:  %s\nпароль: %s\nURL: http://%s:%s@%s\n", m["addr"], m["username"], m["password"], m["username"], m["password"], m["addr"])
+	fmt.Fprintf(a.env.Out, "прокси (HTTP и SOCKS5): %s\nлогин:  %s\nпароль: %s\nURL: http://%s:%s@%s\n", m.Addr, m.Username, m.Password, m.Username, m.Password, m.Addr)
+	if m.LAN {
+		for _, ip := range m.LANAddrs {
+			fmt.Fprintf(a.env.Out, "для других устройств сети: %s:%d\n", ip, m.Port)
+		}
+	} else {
+		fmt.Fprintln(a.env.Out, "раздача в локальную сеть выключена: brodctl settings set proxy.lan 1")
+	}
 	return nil
 }
 

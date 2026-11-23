@@ -325,7 +325,7 @@ func TestSettingsWhitelistAndLogsRedaction(t *testing.T) {
 			t.Fatalf("секретная или неизвестная настройка %q доступна через SetSetting", k)
 		}
 	}
-	if s, _ := c.Settings(); len(s) != 19 || s[SetFakeIP] != "0" || s[SetUpdateCheck] != "1" || s[SetOTASources] != "1" || s["security.hide_insecure"] != "1" || s[SetViaWarp] != "" || s[SetAutoGroup] != "" || s[SetKillswitch] != killswitchDefault {
+	if s, _ := c.Settings(); len(s) != 20 || s[SetProxyLAN] != "0" || s[SetFakeIP] != "0" || s[SetUpdateCheck] != "1" || s[SetOTASources] != "1" || s["security.hide_insecure"] != "1" || s[SetViaWarp] != "" || s[SetAutoGroup] != "" || s[SetKillswitch] != killswitchDefault {
 		t.Fatalf("настройки: %v", s)
 	}
 	logPath := filepath.Join(c.cfg.StateDir, "engine.log")
