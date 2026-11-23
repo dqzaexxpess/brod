@@ -530,6 +530,8 @@ func (c *Core) healthLoop(ctx context.Context) {
 	defer warm.Stop()
 	net := time.NewTicker(c.cfg.NetInterval)
 	defer net.Stop()
+	chain := time.NewTicker(chainWatchEvery)
+	defer chain.Stop()
 	// netlink сообщает о смене сети сразу; опрос остаётся запасным путём (другая ОС, ошибка подписки)
 	var netEvents <-chan struct{}
 	subscribe := func() {
@@ -562,6 +564,11 @@ func (c *Core) healthLoop(ctx context.Context) {
 				return
 			}
 			c.CheckNetwork()
+		case <-chain.C:
+			if ctx.Err() != nil {
+				return
+			}
+			c.checkActiveChain(ctx)
 		case <-resub.C:
 			if netEvents == nil && ctx.Err() == nil {
 				subscribe()

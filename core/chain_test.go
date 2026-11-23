@@ -464,3 +464,86 @@ func TestCheckChainFindsDeadHop(t *testing.T) {
 		t.Errorf("не цепочка: ожидалась ErrInvalid, получено %v", err)
 	}
 }
+
+func TestCheckActiveChainAnnouncesDeadHopOnce(t *testing.T) {
+	c := newCore(t, t.TempDir())
+	t.Cleanup(func() { c.Close() })
+	alive, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Skip("нет loopback TCP:", err)
+	}
+	defer alive.Close()
+	go func() {
+		for {
+			cn, err := alive.Accept()
+			if err != nil {
+				return
+			}
+			cn.Close()
+		}
+	}()
+	dead, _ := net.Listen("tcp", "127.0.0.1:0")
+	deadAddr := dead.Addr().(*net.TCPAddr)
+	dead.Close()
+	a := socksNode(t, c, "cw-a", alive.Addr().(*net.TCPAddr).Port, "socks")
+	b := socksNode(t, c, "cw-b", deadAddr.Port, "socks")
+	id, err := c.AddChain("", []string{a, b}, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sub := c.bus.Subscribe(16)
+	defer sub.Close()
+	events := func() (n int) {
+		for {
+			select {
+			case e := <-sub.C:
+				if e.Kind == EvChainHop {
+					n++
+					if !strings.Contains(e.Detail, `"hop":2`) {
+						t.Errorf("объявлено не второе звено: %s", e.Detail)
+					}
+				}
+			default:
+				return
+			}
+		}
+	}
+	ctx := context.Background()
+	c.checkActiveChain(ctx) // цепочка не активна: ничего
+	c.mu.Lock()
+	c.selected[store.ScopeActive] = id
+	c.mu.Unlock()
+	c.checkActiveChain(ctx) // первый провал: ещё не объявляем
+	if n := events(); n != 0 {
+		t.Fatalf("после одного провала события быть не должно: %d", n)
+	}
+	c.checkActiveChain(ctx) // второй подряд: объявляем
+	if n := events(); n != 1 {
+		t.Fatalf("после двух провалов подряд ожидалось 1 событие: %d", n)
+	}
+	c.checkActiveChain(ctx) // звено всё ещё мёртвое: повторять нельзя
+	if n := events(); n != 0 {
+		t.Fatalf("повторное событие: %d", n)
+	}
+	// звено ожило (слушатель на том же порту), затем снова упало: после оживления память сброшена
+	ln, err := net.Listen("tcp", deadAddr.String())
+	if err != nil {
+		t.Skip("порт не удалось занять:", err)
+	}
+	go func() {
+		for {
+			cn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			cn.Close()
+		}
+	}()
+	c.checkActiveChain(ctx)
+	ln.Close()
+	c.checkActiveChain(ctx)
+	c.checkActiveChain(ctx)
+	if n := events(); n != 1 {
+		t.Fatalf("после оживления и нового падения ожидалось новое событие: %d", n)
+	}
+}

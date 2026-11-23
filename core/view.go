@@ -105,15 +105,20 @@ func (c *Core) Nodes(q NodesQuery) ([]NodeView, error) {
 		if !v.L2At.IsZero() && !v.L2At.Before(v.LastFail) {
 			sc += 500
 		}
-		if v.GoogleAPI {
-			sc += 100
-		}
 		return sc
 	}
-	// порядок равных по рангу задан явно (свежие первыми, затем по ID), чтобы результат не зависел от пути выборки
+	// внутри группы (свои, избранные, живые, остальные) — по той же оценке, что выбирает «лучший узел», чтобы верх списка совпадал с его выбором;
+	// порядок равных задан явно (свежие первыми, затем по ID), чтобы результат не зависел от пути выборки
+	score := make(map[string]float64, len(out))
+	for _, v := range out {
+		score[v.ID] = bestScore(v)
+	}
 	sortStable(out, func(a, b NodeView) bool {
 		if ra, rb := rank(a), rank(b); ra != rb {
 			return ra > rb
+		}
+		if sa, sb := score[a.ID], score[b.ID]; sa != sb {
+			return sa > sb
 		}
 		if !a.LastSeen.Equal(b.LastSeen) {
 			return a.LastSeen.After(b.LastSeen)

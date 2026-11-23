@@ -341,6 +341,12 @@ func (c *Core) ingestResult(ctx context.Context, res aggregator.Result, stamp in
 	if m := res.Meta; !m.IsZero() {
 		if err := c.st.RecordSourceMeta(name, m.Title, m.UpdateHours, m.Upload+m.Download, m.Total, m.Expire); err != nil {
 			c.bus.Publish(store.Event{Kind: EvError, Initiator: "auto", Detail: "сведения источника: " + err.Error()})
+		} else {
+			var exp time.Time
+			if m.Expire > 0 {
+				exp = time.Unix(m.Expire, 0)
+			}
+			c.noteSubscription(name, m.Title, m.Upload+m.Download, m.Total, exp)
 		}
 	}
 	if nodes > 0 { // источник, отдавший только прокси Telegram, не должен «убивать» свои прежние узлы

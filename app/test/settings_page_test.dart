@@ -73,8 +73,9 @@ void main() {
     expect(find.text('Раздавать прокси в локальную сеть'), findsOneWidget);
     expect(find.text('Подключение'), findsNothing, reason: 'вместо списка разделов — результаты');
     await tester.tap(find.text('Раздавать прокси в локальную сеть'));
-    await tester.pumpAndSettle();
-    expect(find.text('Правила маршрутизации'), findsOneWidget, reason: 'открылась «Маршрутизация»');
+    await tester.pump(const Duration(milliseconds: 900));
+    expect(find.text('Раздавать прокси в локальную сеть'), findsOneWidget, reason: 'открылась «Маршрутизация», настройка на экране');
+    await tester.pump(const Duration(seconds: 4)); // подсветка гаснет
     await tester.pageBack();
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(SearchBar), 'абракадабра');
@@ -91,9 +92,58 @@ void main() {
     await tester.enterText(find.byType(SearchBar), 'киллсвитч');
     await tester.pumpAndSettle();
     await tester.tap(find.text('Киллсвитч').first);
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 900));
+    await tester.pump(const Duration(seconds: 4));
     expect(find.text('Защита от утечек'), findsOneWidget);
     expect(find.text('Подключение'), findsOneWidget, reason: 'список разделов вернулся');
+    m.dispose();
+  });
+
+  testWidgets('поиск: после ухода в раздел и возврата поле не берёт фокус и не поднимает клавиатуру', (tester) async {
+    final m = await _pump(tester, const Size(420, 900));
+    await tester.tap(find.byType(SearchBar));
+    await tester.pump();
+    expect(tester.testTextInput.isVisible, true, reason: 'поле поиска в фокусе, клавиатура показана');
+    await tester.tap(find.text('Подключение')); // жест «закрыть» клавиатуру фокус не снимает; выбор раздела — должен
+    await tester.pumpAndSettle();
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(tester.testTextInput.isVisible, false, reason: 'после возврата клавиатуры быть не должно');
+    m.dispose();
+  });
+
+  testWidgets('поиск: результат открывает раздел, прокручивает к настройке и подсвечивает её', (tester) async {
+    final m = await _pump(tester, const Size(420, 900));
+    await tester.enterText(find.byType(SearchBar), 'fakeip');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Быстрый DNS (FakeIP)'));
+    await tester.pump(const Duration(milliseconds: 800)); // переход + прокрутка
+    await tester.pump(const Duration(milliseconds: 400));
+    final target = find.text('Быстрый DNS (FakeIP), эксперимент');
+    expect(target, findsOneWidget, reason: 'открылся нужный раздел');
+    final lit = find.ancestor(
+      of: target,
+      matching: find.byWidgetPredicate((w) => w is Material && w.color != null && (w.color!.a - 0.7).abs() < 0.01),
+    );
+    expect(lit, findsOneWidget, reason: 'настройка подсвечена');
+    await tester.pump(const Duration(seconds: 3)); // подсветка гаснет
+    await tester.pumpAndSettle();
+    m.dispose();
+  });
+
+  testWidgets('поиск: функция из меню узла (QR) ведёт на вкладку «Узлы» и подсказывает, куда нажать', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(420, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final m = AppModel(_Api(), pollEvery: const Duration(hours: 1));
+    var shown = 0;
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: SettingsPage(model: m, onShowNodes: () => shown++))));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(SearchBar), 'qr');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('QR-код сервера'));
+    await tester.pumpAndSettle();
+    expect(shown, 1, reason: 'переключились на вкладку «Узлы»');
+    expect(m.toast, contains('Показать QR-код'), reason: 'подсказка, где находится действие');
     m.dispose();
   });
 }

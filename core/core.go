@@ -116,6 +116,9 @@ type Core struct {
 	viaWarpMem    atomic.Int32             // кэш настройки check.via_warp (viaWarpUnknown/On/Off); сбрасывается при её записи
 	warpAcc       *warp.Account            // аккаунт для подбора профилей (warpscan.go); nil — WARP не настроен
 	lastOnlineRaw string                   // последний идентификатор сети, отличный от «offline» (под netMu)
+	chainWatchMu  sync.Mutex               // следит за звеньями активной цепочки (chainwatch.go)
+	chainFails    map[string]int           // «цепочка|звено» → подряд проваленных проверок
+	chainWarned   map[string]bool          // о каких звеньях уже сообщили
 	reattachAt    atomic.Int64             // unix-нс возврата в ту же сотовую сеть после потери связи: провалы до этого момента не мешают проверкам
 	warpChecked   atomic.Bool              // была хотя бы одна проверка WARP (warpCheck)
 	warpLastOK    atomic.Bool              // последняя проверка WARP успешна

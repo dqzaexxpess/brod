@@ -158,7 +158,7 @@ func (p *Presenter) timeout(sticky time.Duration) time.Duration {
 // Handle показывает уведомление по событию (если оно того заслуживает).
 func (p *Presenter) Handle(e store.Event) {
 	switch e.Kind {
-	case core.EvDegraded, core.EvAlternatives, core.EvAutoSwap, core.EvRecovered, core.EvTargetDegrade, core.EvTargetSwitch, core.EvRestoreFailed:
+	case core.EvDegraded, core.EvAlternatives, core.EvAutoSwap, core.EvRecovered, core.EvTargetDegrade, core.EvTargetSwitch, core.EvRestoreFailed, core.EvChainHop:
 		if p.quiet(e) {
 			return
 		}
@@ -216,6 +216,29 @@ func (p *Presenter) Handle(e store.Event) {
 			}
 			p.s.Send(Notification{Summary: "Цель «" + e.Target + "» переключена автоматически", Body: "Теперь: " + p.label(e.Node), Urgency: Normal, Timeout: 10 * time.Second})
 		}
+	case core.EvChainHop:
+		var d struct {
+			Hop    int    `json:"hop"`
+			Of     int    `json:"of"`
+			Server string `json:"server"`
+		}
+		_ = json.Unmarshal([]byte(e.Detail), &d)
+		p.s.Send(Notification{Summary: "Звено цепочки не отвечает", Urgency: p.urgency(), Timeout: p.timeout(15 * time.Second),
+			Body: fmt.Sprintf("Звено %d из %d (%s) цепочки не отвечает. Замените его: соберите цепочку заново из других узлов.", d.Hop, d.Of, d.Server)})
+	case core.EvSubscription:
+		if p.c.NotifyLevel() == "off" {
+			return
+		}
+		var d struct {
+			Source  string `json:"source"`
+			Kind    string `json:"kind"`
+			Stage   string `json:"stage"`
+			Days    int    `json:"days"`
+			LeftPct int    `json:"left_pct"`
+		}
+		_ = json.Unmarshal([]byte(e.Detail), &d)
+		summary, body := core.SubscriptionText(d.Kind, d.Stage, d.Source, d.Days, d.LeftPct)
+		p.s.Send(Notification{Summary: summary, Body: body, Urgency: Normal, Timeout: 12 * time.Second})
 	case core.EvRestoreFailed:
 		p.s.Send(Notification{Summary: "Сохранённый узел не поднялся", Urgency: Critical, Timeout: -1,
 			Body: "Автоматически другой узел не выбирается. Выберите узел: brodctl list, brodctl connect"})

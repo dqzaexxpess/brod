@@ -307,3 +307,28 @@ func TestAutoSwapNotification(t *testing.T) {
 		t.Fatalf("итог автопереключения: %d %+v", fs.count(), fs.last())
 	}
 }
+
+// Предупреждение о подписке показывается и на уровне «важные» при выключенном VPN (оно не про активный узел), но не при «выкл».
+func TestSubscriptionNotification(t *testing.T) {
+	c, fs, p := setup(t)
+	_ = c.SetSetting(core.SetNotifyLevel, "important", "user")
+	p.VPNOn = func() bool { return false }
+	p.Handle(store.Event{Kind: core.EvSubscription, Detail: `{"source":"Моя","kind":"expire","stage":"soon","days":2}`})
+	if fs.count() != 1 || fs.last().Summary != "Подписка скоро закончится" || !strings.Contains(fs.last().Body, "через 2 дня") {
+		t.Fatalf("уведомление о сроке: %d %+v", fs.count(), fs.last())
+	}
+	_ = c.SetSetting(core.SetNotifyLevel, "off", "user")
+	p.Handle(store.Event{Kind: core.EvSubscription, Detail: `{"source":"Моя","kind":"traffic","stage":"low","left_pct":5}`})
+	if fs.count() != 1 {
+		t.Fatalf("при выключенных уведомлениях ничего не показывается: %d", fs.count())
+	}
+}
+
+func TestChainHopNotification(t *testing.T) {
+	c, fs, p := setup(t)
+	_ = c.SetSetting(core.SetNotifyLevel, "all", "user")
+	p.Handle(store.Event{Kind: core.EvChainHop, Detail: `{"hop":2,"of":3,"server":"b.example:443"}`})
+	if fs.count() != 1 || fs.last().Summary != "Звено цепочки не отвечает" || !strings.Contains(fs.last().Body, "Звено 2 из 3 (b.example:443)") {
+		t.Fatalf("уведомление: %d %+v", fs.count(), fs.last())
+	}
+}

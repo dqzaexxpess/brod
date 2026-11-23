@@ -12,6 +12,7 @@ import 'own_page.dart';
 import 'prefs.dart';
 import 'report_page.dart';
 import 'rules_page.dart';
+import 'node_dialogs.dart';
 import 'settings_search.dart';
 import 'sources_page.dart';
 import 'user_sets_page.dart';
@@ -41,12 +42,13 @@ const _secInfo = {
 
 /// Настройки.
 class SettingsPage extends StatefulWidget {
-  const SettingsPage({super.key, required this.model, this.visible = true, this.prefs, this.onQuit});
+  const SettingsPage({super.key, required this.model, this.visible = true, this.prefs, this.onQuit, this.onShowNodes});
 
   final AppModel model;
   final bool visible;
   final Prefs? prefs;
   final VoidCallback? onQuit;
+  final VoidCallback? onShowNodes; // перейти на вкладку «Узлы» (для пунктов поиска про действия из меню узла)
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -58,6 +60,10 @@ class _SettingsPageState extends State<SettingsPage> {
   final _tick = ValueNotifier<int>(0); // перерисовка открытого раздела при изменении локального состояния
   _Sec _sel = _Sec.connection;
   final _query = TextEditingController();
+  final _searchFocus = FocusNode();
+  final _anchors = <String, GlobalKey>{}; // якоря внутри разделов: к ним прокручивается экран из результатов поиска
+  String? _hl; // подсвеченный якорь
+  GlobalKey _anchor(String id) => _anchors.putIfAbsent(id, GlobalKey.new);
 
   /// Разделы, которые есть на этой платформе и при этих данных.
   List<_Sec> get _secs => [
@@ -106,45 +112,169 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   void dispose() {
     _query.dispose();
+    _searchFocus.dispose();
     _tick.dispose();
     super.dispose();
   }
 
 
-  /// Всё, что можно найти поиском: настройки и функции с их разделом и словами, по которым их ищут. Платформенные пункты — только там, где есть.
+  /// Всё, что можно найти поиском: настройки и функции со словами, по которым их ищут. Пункт с page сразу открывает страницу или окно; остальные
+  /// открывают раздел, прокручивают к настройке и подсвечивают её (id — якорь внутри раздела). Платформенные пункты — только там, где они есть.
   List<SearchEntry> get _index {
     final android = Platform.isAndroid;
     return [
-      const SearchEntry('Автоподключение VPN', 'connection', 'запуск после перезагрузки включать сам постоянный vpn always-on'),
-      const SearchEntry('Если выход перестал отвечать', 'connection', 'автозамена узла переключать сам предложить сменить деградация сбой узел умер'),
-      const SearchEntry('Киллсвитч', 'connection', 'защита от утечек блокировка интернета без vpn kill switch утечка'),
-      if (android) const SearchEntry('Работа в фоне', 'connection', 'батарея экономия энергии оптимизация не убивать приложение фон'),
-      const SearchEntry('Правила маршрутизации', 'routing', 'что через vpn напрямую блокировать профили домены маршруты split'),
-      if (android) const SearchEntry('VPN для приложений', 'routing', 'приложения исключить только выбранные раздельное туннелирование'),
-      const SearchEntry('Свои списки', 'routing', 'rule-set наборы правил подписка на список адресов'),
-      if (!android) const SearchEntry('Быстрый DNS (FakeIP)', 'routing', 'dns fakeip днс ускорение эксперимент'),
-      const SearchEntry('Раздавать прокси в локальную сеть', 'routing', 'lan телевизор консоль второй компьютер socks http прокси для других устройств раздача'),
-      const SearchEntry('Списки блокировок', 'routing', 'заблокированное в рф банки только внутри рф обновить rule-set'),
-      const SearchEntry('Мои серверы', 'nodes', 'свой сервер ссылка vless vmess trojan shadowsocks wireguard добавить цепочка прокси хоп hop'),
-      const SearchEntry('Источники подписок', 'nodes', 'подписка subscription url список узлов квота трафик срок'),
-      const SearchEntry('Cloudflare WARP', 'nodes', 'warp варп аккаунт wireguard подбор endpoint'),
-      const SearchEntry('Проверять узлы через WARP', 'nodes', 'warp проверка узлов цепочка'),
-      const SearchEntry('Загрузить аккаунт WARP из файла', 'nodes', 'warp-account.json импорт аккаунта'),
-      const SearchEntry('Какие уведомления показывать', 'notify', 'уведомления оповещения важные все выключить тишина'),
-      const SearchEntry('Тема', 'look', 'тёмная светлая системная цвет акцент оформление'),
-      const SearchEntry('Чисто чёрный фон (AMOLED)', 'look', 'amoled чёрная тема экран'),
-      const SearchEntry('Список узлов', 'look', 'плотный компактный группировка по странам'),
-      if (android) const SearchEntry('Предлагать добавить ссылку из буфера обмена', 'look', 'буфер обмена clipboard ссылка vless вставка импорт'),
-      if (_hasSystem && Autostart.supported) const SearchEntry('Запускать при входе в систему', 'system', 'автозапуск автозагрузка старт с системой'),
-      if (_hasSystem && !android) const SearchEntry('Запускать свёрнутым в трей', 'system', 'трей скрытый запуск окно не показывать'),
-      if (_hasSystem && !android) const SearchEntry('Крестик сворачивает в трей', 'system', 'закрытие окна выход трей фон'),
-      const SearchEntry('Резервная копия', 'data', 'сохранить восстановить бэкап экспорт импорт настроек правил серверов'),
-      const SearchEntry('Диагностический отчёт', 'data', 'отчёт диагностика тесты dns связи warp логи неполадки проблема не работает'),
-      const SearchEntry('Что видят сайты', 'data', 'мой ip адрес страна утечка dns webrtc анонимность проверка'),
-      if (android) const SearchEntry('Поделиться журналом', 'data', 'лог журнал файл для разбора неполадок'),
-      const SearchEntry('Версия и обновление приложения', 'about', 'обновить скачать новая версия проверка обновлений ota'),
-      const SearchEntry('Проверять обновления раз в сутки', 'about', 'автообновление уведомление о новой версии'),
+      const SearchEntry('Автоподключение VPN', 'connection', 'запуск после перезагрузки включать сам постоянный vpn always-on автозапуск vpn', id: 'autoconnect'),
+      const SearchEntry('Если выход перестал отвечать', 'connection', 'автозамена узла переключать сам предложить сменить деградация сбой узел умер автопереключение', id: 'degrade'),
+      const SearchEntry('Киллсвитч', 'connection', 'защита от утечек блокировка интернета без vpn kill switch утечка обрыв', id: 'killswitch'),
+      if (android) const SearchEntry('Работа в фоне', 'connection', 'батарея экономия энергии оптимизация не убивать приложение фон не выгружать', id: 'battery'),
+      const SearchEntry('Правила маршрутизации', 'routing', 'что через vpn напрямую блокировать профили домены маршруты split правила', id: 'rules', page: true),
+      if (android) const SearchEntry('VPN для приложений', 'routing', 'приложения исключить только выбранные раздельное туннелирование список приложений', id: 'apps', page: true),
+      const SearchEntry('Свои списки', 'routing', 'rule-set наборы правил подписка на список адресов', id: 'usersets', page: true),
+      if (!android) const SearchEntry('Быстрый DNS (FakeIP)', 'routing', 'dns fakeip днс ускорение эксперимент', id: 'fakeip'),
+      const SearchEntry('Раздавать прокси в локальную сеть', 'routing', 'lan телевизор консоль второй компьютер socks http прокси для других устройств раздача логин пароль', id: 'lanproxy'),
+      const SearchEntry('Списки блокировок', 'routing', 'заблокированное в рф банки только внутри рф обновить rule-set', id: 'blocklists'),
+      // действия из меню узла (⋮ у узла в списке): поиск ведёт на вкладку «Узлы» и подсказывает, где они
+      const SearchEntry('QR-код сервера', 'nodes', 'показать qr код поделиться отсканировать камерой передать сервер', id: 'node:Узел → ⋮ → «Показать QR-код»', page: true),
+      const SearchEntry('Поделиться ссылкой на сервер', 'nodes', 'поделиться ссылка отправить сервер vless', id: 'node:Узел → ⋮ → «Поделиться ссылкой»', page: true),
+      const SearchEntry('Проверить пинг узла', 'nodes', 'пинг задержка проверить задержку', id: 'node:Узел → ⋮ → «Проверить пинг»', page: true),
+      const SearchEntry('Замерить скорость узла', 'nodes', 'скорость замер speedtest мбит', id: 'node:Узел → ⋮ → «Замерить скорость»', page: true),
+      const SearchEntry('Проверить узел для звонков', 'nodes', 'звонки голос видео udp telegram whatsapp discord проверка для звонков', id: 'node:Узел → ⋮ → «Проверить для звонков»', page: true),
+      const SearchEntry('Проверить страну и чистоту IP', 'nodes', 'страна ip чистый грязный репутация проверить выход', id: 'node:Узел → ⋮ → «Проверить страну и чистоту IP»', page: true),
+      const SearchEntry('Проверить звенья цепочки', 'nodes', 'цепочка звено умерло не отвечает проверить звенья', id: 'node:Цепочка → ⋮ → «Проверить звенья»', page: true),
+      const SearchEntry('Переименовать узел', 'nodes', 'название имя переименовать узел', id: 'node:Узел → ⋮ → «Переименовать»', page: true),
+      const SearchEntry('Мои серверы', 'nodes', 'свой сервер ссылка vless vmess trojan shadowsocks wireguard добавить вставить', id: 'own', page: true),
+      const SearchEntry('Собрать цепочку прокси', 'nodes', 'цепочка хоп hop несколько узлов подряд двойной прокси каскад', id: 'chain', page: true),
+      const SearchEntry('Источники подписок', 'nodes', 'подписка subscription url список узлов квота трафик срок обновить', id: 'sources', page: true),
+      const SearchEntry('Cloudflare WARP', 'nodes', 'warp варп аккаунт wireguard подбор endpoint', id: 'warp', page: true),
+      const SearchEntry('Проверять узлы через WARP', 'nodes', 'warp проверка узлов цепочка', id: 'viawarp'),
+      const SearchEntry('Аккаунт WARP', 'nodes', 'warp зарегистрировать создать аккаунт регистрация', id: 'warpacct'),
+      const SearchEntry('Загрузить аккаунт WARP из файла', 'nodes', 'warp-account.json импорт аккаунта файл', id: 'warpimport'),
+      const SearchEntry('Какие уведомления показывать', 'notify', 'уведомления оповещения важные все выключить тишина', id: 'notify'),
+      const SearchEntry('Тема', 'look', 'тёмная светлая системная цвет акцент оформление ночная свой цвет hex палитра', id: 'theme'),
+      const SearchEntry('Размер текста', 'look', 'шрифт крупнее мельче масштаб текста читаемость', id: 'textscale'),
+      const SearchEntry('Чисто чёрный фон (AMOLED)', 'look', 'amoled чёрная тема экран', id: 'amoled'),
+      const SearchEntry('Плотный список узлов', 'look', 'компактный список узлов плотность', id: 'compact'),
+      const SearchEntry('Группировать узлы по странам', 'look', 'страны группировка список узлов', id: 'group'),
+      if (android) const SearchEntry('Предлагать добавить ссылку из буфера обмена', 'look', 'буфер обмена clipboard ссылка vless вставка импорт', id: 'clipboard'),
+      if (_hasSystem && Autostart.supported) const SearchEntry('Запускать при входе в систему', 'system', 'автозапуск автозагрузка старт с системой', id: 'autostart'),
+      if (_hasSystem && !android) const SearchEntry('Запускать свёрнутым в трей', 'system', 'трей скрытый запуск окно не показывать', id: 'hidden'),
+      if (_hasSystem && !android) const SearchEntry('Крестик сворачивает в трей', 'system', 'закрытие окна выход трей фон', id: 'closetray'),
+      const SearchEntry('Сохранить копию', 'data', 'резервная копия бэкап экспорт настроек правил серверов сохранить в файл', id: 'backupsave', page: true),
+      const SearchEntry('Восстановить из копии', 'data', 'резервная копия бэкап импорт восстановить из файла', id: 'backuprestore', page: true),
+      const SearchEntry('Диагностический отчёт', 'data', 'отчёт диагностика тесты dns связи warp логи неполадки проблема не работает', id: 'report', page: true),
+      const SearchEntry('Что видят сайты', 'data', 'мой ip адрес страна утечка dns webrtc анонимность проверка', id: 'sites', page: true),
+      if (android) const SearchEntry('Поделиться журналом', 'data', 'лог журнал файл для разбора неполадок', id: 'sharelogs', page: true),
+      const SearchEntry('Версия и обновление приложения', 'about', 'обновить скачать новая версия проверка обновлений ota установить', id: 'update', page: true),
+      const SearchEntry('Проверять обновления раз в сутки', 'about', 'автообновление уведомление о новой версии', id: 'autocheck'),
     ];
+  }
+
+  /// Свой акцентный цвет: HEX вида #3F7DE0.
+  Future<void> _customAccentDialog(BuildContext context, Prefs p) async {
+    final c = TextEditingController(text: p.accent < 0 ? '#${(p.accentColor.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}' : '');
+    final color = await showDialog<Color>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) {
+          final parsed = parseHexColor(c.text);
+          return AlertDialog(
+            title: const Text('Свой цвет'),
+            content: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextField(
+                controller: c,
+                autofocus: true,
+                maxLength: 7,
+                decoration: InputDecoration(labelText: 'HEX, например #3F7DE0', errorText: c.text.isNotEmpty && parsed == null ? 'Нужно шесть цифр или букв a–f' : null, counterText: ''),
+                onChanged: (_) => setS(() {}),
+                onSubmitted: (_) => parsed == null ? null : Navigator.pop(ctx, parsed),
+              ),
+              const SizedBox(height: 12),
+              Container(width: 48, height: 48, decoration: BoxDecoration(shape: BoxShape.circle, color: parsed ?? Colors.transparent, border: Border.all(color: Theme.of(ctx).colorScheme.outline))),
+            ]),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
+              FilledButton(onPressed: parsed == null ? null : () => Navigator.pop(ctx, parsed), child: const Text('Применить')),
+            ],
+          );
+        },
+      ),
+    );
+    c.dispose();
+    if (color != null) p.update(accent: -1, customAccent: color.toARGB32());
+  }
+
+  /// Страница или окно, которое открывает пункт поиска с page.
+  void _openPage(BuildContext context, String id) {
+    final m = widget.model;
+    if (id.startsWith('node:')) {
+      // эти действия живут в меню узла: переходим на вкладку «Узлы» и говорим, куда нажать
+      widget.onShowNodes?.call();
+      m.showHint(id.substring(5));
+      return;
+    }
+    void push(Widget page) => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => page));
+    switch (id) {
+      case 'rules':
+        push(RulesPage(model: m));
+      case 'apps':
+        push(AppsPage(model: m));
+      case 'usersets':
+        push(UserSetsPage(model: m));
+      case 'own':
+        push(OwnPage(model: m));
+      case 'chain':
+        chainDialog(context, m);
+      case 'sources':
+        push(SourcesPage(model: m));
+      case 'warp':
+        push(WarpPage(model: m));
+      case 'backupsave':
+        backupDialog(context, m, restore: false);
+      case 'backuprestore':
+        backupDialog(context, m, restore: true);
+      case 'report':
+        push(ReportPage(model: m));
+      case 'sites':
+        push(DiagnosticsPage(model: m));
+      case 'sharelogs':
+        AndroidCore.shareLogs();
+      case 'update':
+        showUpdateDialog(context, m);
+    }
+  }
+
+  /// Открывает найденное: страницу сразу, настройку — через её раздел с прокруткой и подсветкой.
+  void _openEntry(BuildContext context, SearchEntry e, bool wide) {
+    _searchFocus.unfocus();
+    if (e.page) {
+      _openPage(context, e.id);
+      return;
+    }
+    final sec = _secById(e.section);
+    if (sec == null) return;
+    _openSection(context, sec, wide);
+    if (e.id.isNotEmpty) _reveal(e.id, 0);
+  }
+
+  /// Ждёт, пока раздел построится (на телефоне — пока откроется экран), прокручивает к якорю и подсвечивает его на пару секунд.
+  void _reveal(String id, int tries) {
+    Future.delayed(Duration(milliseconds: tries == 0 ? 350 : 100), () {
+      if (!mounted) return;
+      final ctx = _anchors[id]?.currentContext;
+      if (ctx == null || !ctx.mounted) {
+        if (tries < 15) _reveal(id, tries + 1);
+        return;
+      }
+      _hl = id;
+      _tick.value++;
+      Scrollable.ensureVisible(ctx, alignment: 0.2, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+      Future.delayed(const Duration(milliseconds: 2500), () {
+        if (mounted && _hl == id) {
+          _hl = null;
+          _tick.value++;
+        }
+      });
+    });
   }
 
   _Sec? _secById(String id) {
@@ -155,6 +285,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   void _openSection(BuildContext context, _Sec sec, bool wide) {
+    _searchFocus.unfocus(); // иначе при возврате с экрана раздела поле поиска снова получает фокус и поднимает клавиатуру
     if (wide) {
       setState(() {
         _sel = sec;
@@ -184,6 +315,8 @@ class _SettingsPageState extends State<SettingsPage> {
               padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
               child: SearchBar(
                 controller: _query,
+                focusNode: _searchFocus,
+                onTapOutside: (_) => _searchFocus.unfocus(),
                 hintText: 'Найти настройку или функцию',
                 leading: const Icon(Icons.search),
                 elevation: const WidgetStatePropertyAll(0),
@@ -200,7 +333,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     subtitle: Text(_secInfo[sec]!.title),
                     trailing: wide ? null : const Icon(Icons.chevron_right),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    onTap: () => _openSection(context, sec, wide),
+                    onTap: () => _openEntry(context, e, wide),
                   ),
               if (searchSettings(_query.text, _index).isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('Ничего не найдено. Попробуйте другое слово: «прокси», «киллсвитч», «обновление».')),
             ] else
@@ -260,6 +393,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final cs = Theme.of(context).colorScheme;
     final h = Theme.of(context).textTheme.titleSmall?.copyWith(color: cs.primary);
     final small = TextStyle(fontSize: 12, color: cs.onSurfaceVariant);
+    Widget hl(String id, Widget w) => _Anchor(key: _anchor(id), lit: _hl == id, child: w);
     Widget title(String t) => Padding(padding: const EdgeInsets.only(top: 8, bottom: 4), child: Text(t, style: h));
     Widget nav(IconData icon, String t, String sub, VoidCallback onTap) => ListTile(contentPadding: EdgeInsets.zero, leading: Icon(icon), title: Text(t), subtitle: Text(sub), trailing: const Icon(Icons.chevron_right), onTap: onTap);
     void push(Widget page) => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => page));
@@ -269,7 +403,7 @@ class _SettingsPageState extends State<SettingsPage> {
         return [
           // автоподключением управляет демон; на Android VPN при запуске поднимает система («Постоянный VPN») — поля нет
           if ((m.vpn?.autoconnect ?? '').isNotEmpty) ...[
-            title('Автоподключение VPN'),
+            hl('autoconnect', title('Автоподключение VPN')),
             Text('После перезагрузки, сбоя или перезапуска службы', style: small),
             const SizedBox(height: 8),
             SegmentedButton<String>(
@@ -284,7 +418,7 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
             const SizedBox(height: 16),
           ],
-          title('Если выход перестал отвечать'),
+          hl('degrade', title('Если выход перестал отвечать')),
           const SizedBox(height: 4),
           SegmentedButton<String>(
             showSelectedIcon: false,
@@ -296,7 +430,7 @@ class _SettingsPageState extends State<SettingsPage> {
             onSelectionChanged: (s) => m.setSetting('degrade.action', s.first),
           ),
           const SizedBox(height: 16),
-          title('Защита от утечек'),
+          hl('killswitch', title('Защита от утечек')),
           // на Android киллсвитч — системный («Постоянный VPN» и блокировка без VPN): один пункт ведёт в настройки системы
           if (Platform.isAndroid)
             ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Icons.vpn_lock), title: const Text('Киллсвитч'), subtitle: Text(ks.summary), trailing: const Icon(Icons.chevron_right), onTap: AndroidCore.openVpnSettings)
@@ -311,7 +445,7 @@ class _SettingsPageState extends State<SettingsPage> {
           if (ks.supported && ks.howToRelease != null) Padding(padding: const EdgeInsets.only(bottom: 4), child: Text(ks.howToRelease!, style: small)),
           if (Platform.isAndroid) ...[
             const SizedBox(height: 8),
-            title('Работа в фоне'),
+            hl('battery', title('Работа в фоне')),
             const _BatteryTile(),
           ],
         ];
@@ -323,16 +457,16 @@ class _SettingsPageState extends State<SettingsPage> {
           const SizedBox(height: 8),
           // на Android не проверялось (нет способа проверить DNS из adb): переключатель только на компьютере
           if (!Platform.isAndroid)
-            SwitchListTile(
+            hl('fakeip', SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('Быстрый DNS (FakeIP), эксперимент'),
               subtitle: const Text(
                   'Только в режиме «Всё через выход»; нужен перезапуск VPN. Сайты с частным адресом добавьте в правила «напрямую».'),
               value: m.fakeipOn,
               onChanged: (v) => m.setSetting('dns.fakeip', v ? '1' : '0'),
-            ),
+            )),
           const SizedBox(height: 8),
-          SwitchListTile(
+          hl('lanproxy', SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('Раздавать прокси в локальную сеть'),
             subtitle: const Text('Другие устройства сети (телевизор, консоль, второй компьютер) подключаются к Brod как к прокси и идут через ваш выход. Защита: логин и пароль'),
@@ -341,10 +475,10 @@ class _SettingsPageState extends State<SettingsPage> {
               await m.setSetting('proxy.lan', v ? '1' : '0');
               await m.loadProxyShare();
             },
-          ),
+          )),
           if (m.proxyLanOn) _ProxyShareCard(model: m),
           const SizedBox(height: 8),
-          title('Списки блокировок'),
+          hl('blocklists', title('Списки блокировок')),
           ListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('Заблокированное в РФ, банки, «только внутри РФ»'),
@@ -358,7 +492,7 @@ class _SettingsPageState extends State<SettingsPage> {
           nav(Icons.rss_feed, 'Источники подписок', m.sources.isEmpty ? 'Загрузка…' : '${m.sources.where((s) => s.enabled).length} из ${m.sources.length} включено', () => push(SourcesPage(model: m))),
           const SizedBox(height: 8),
           nav(Icons.cloud_outlined, 'Cloudflare WARP', 'Подбор под сеть, ручные параметры, аккаунт', () => push(WarpPage(model: m))),
-          title('Проверка узлов через WARP'),
+          hl('viawarp', title('Проверка узлов через WARP')),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('Проверять узлы через WARP'),
@@ -366,26 +500,26 @@ class _SettingsPageState extends State<SettingsPage> {
             value: m.viaWarp,
             onChanged: m.status?.warpEnabled == true ? m.setViaWarp : null,
           ),
-          ListTile(
+          hl('warpacct', ListTile(
             contentPadding: EdgeInsets.zero,
             leading: m.warpBusy ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.cloud_outlined),
             title: Text(m.status?.warpEnabled == true ? 'Аккаунт WARP: настроен' : 'Аккаунт WARP: не настроен'),
             subtitle: Text(m.warpBusy ? 'Регистрирую… (до двух минут)' : 'Если сеть режет, регистрация пойдёт через выбранный узел'),
             enabled: !m.warpBusy,
             onTap: () => warpRegisterDialog(context, m),
-          ),
-          ListTile(
+          )),
+          hl('warpimport', ListTile(
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.file_open_outlined),
             title: const Text('Загрузить аккаунт WARP из файла'),
             subtitle: const Text('warp-account.json с другого устройства'),
             enabled: !m.warpBusy,
             onTap: () => warpImportDialog(context, m),
-          ),
+          )),
         ];
       case _Sec.notify:
         return [
-          title('Какие уведомления показывать'),
+          hl('notify', title('Какие уведомления показывать')),
           const SizedBox(height: 4),
           SegmentedButton<String>(
             showSelectedIcon: false,
@@ -403,7 +537,7 @@ class _SettingsPageState extends State<SettingsPage> {
         final p = widget.prefs;
         if (p == null) return [const Text('Недоступно')];
         return [
-          title('Тема'),
+          hl('theme', title('Тема')),
           SegmentedButton<String>(
             showSelectedIcon: false,
             // узкий экран и крупный шрифт: меньше отступов, подпись сжимается по ширине сегмента (_SegLabel), а не обрезается
@@ -432,15 +566,38 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                 ),
               ),
+            Tooltip(
+              message: 'Свой цвет',
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: () => _customAccentDialog(context, p),
+                child: Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(shape: BoxShape.circle, color: p.accent < 0 ? p.accentColor : null, border: Border.all(color: p.accent < 0 ? cs.onSurface : cs.outline, width: p.accent < 0 ? 3 : 1)),
+                  child: Icon(p.accent < 0 ? Icons.check : Icons.palette_outlined, size: 18, color: p.accent < 0 ? Colors.white : cs.onSurfaceVariant),
+                ),
+              ),
+            ),
           ]),
-          SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Чисто чёрный фон (AMOLED)'), subtitle: const Text('Только в тёмной теме'), value: p.amoled, onChanged: (v) => p.update(amoled: v)),
+          hl('amoled', SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Чисто чёрный фон (AMOLED)'), subtitle: const Text('Только в тёмной теме'), value: p.amoled, onChanged: (v) => p.update(amoled: v))),
           const Divider(height: 32),
-          title('Список узлов'),
-          SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Плотный список узлов'), value: p.compact, onChanged: (v) => p.update(compact: v)),
-          SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Группировать узлы по странам'), value: p.groupByCountry, onChanged: (v) => p.update(groupByCountry: v)),
+          hl('textscale', title('Размер текста')),
+          const SizedBox(height: 4),
+          SegmentedButton<double>(
+            showSelectedIcon: false,
+            style: SegmentedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 6), visualDensity: VisualDensity.compact),
+            segments: [for (final t in textScales) ButtonSegment(value: t.$2, label: _SegLabel(t.$1))],
+            selected: {textScales.map((t) => t.$2).reduce((a, b) => (a - p.textScale).abs() <= (b - p.textScale).abs() ? a : b)},
+            onSelectionChanged: (v) => p.update(textScale: v.first),
+          ),
+          const Divider(height: 32),
+          hl('nodelist', title('Список узлов')),
+          hl('compact', SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Плотный список узлов'), value: p.compact, onChanged: (v) => p.update(compact: v))),
+          hl('group', SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Группировать узлы по странам'), value: p.groupByCountry, onChanged: (v) => p.update(groupByCountry: v))),
           if (Platform.isAndroid) ...[
             const Divider(height: 32),
-            title('Добавление серверов'),
+            hl('clipboard', title('Добавление серверов')),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('Предлагать добавить ссылку из буфера обмена'),
@@ -454,58 +611,58 @@ class _SettingsPageState extends State<SettingsPage> {
         final p = widget.prefs;
         return [
           if (Autostart.supported)
-            SwitchListTile(
+            hl('autostart', SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('Запускать при входе в систему'),
               subtitle: Text(_autostartError ?? 'Значок в трее и уведомления сразу после входа'),
               value: _autostart ?? false,
               onChanged: _autostart == null ? null : _setAutostart,
-            ),
+            )),
           // одна настройка для любого запуска — и ручного, и при входе в систему
           if (!Platform.isAndroid && p != null) ...[
-            SwitchListTile(
+            hl('hidden', SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('Запускать свёрнутым в трей'),
               subtitle: const Text('Не открывать окно при запуске и входе в систему'),
               value: p.startHidden,
               onChanged: (v) => p.update(startHidden: v),
-            ),
-            SwitchListTile(
+            )),
+            hl('closetray', SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('Крестик сворачивает в трей'),
               subtitle: const Text('VPN и демон продолжают работать; выход — в меню трея'),
               value: p.closeToTray,
               onChanged: (v) => p.update(closeToTray: v),
-            ),
+            )),
             if (widget.onQuit != null) Align(alignment: Alignment.centerLeft, child: TextButton.icon(onPressed: widget.onQuit, icon: const Icon(Icons.power_settings_new), label: const Text('Выйти из приложения'))),
           ],
         ];
       case _Sec.data:
         return [
-          title('Резервная копия'),
-          ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Icons.save_alt), title: const Text('Сохранить копию'), subtitle: const Text('Правила, настройки, названия и свои серверы в одном файле'), onTap: () => backupDialog(context, m, restore: false)),
-          ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Icons.restore), title: const Text('Восстановить из копии'), onTap: () => backupDialog(context, m, restore: true)),
+          hl('backup', title('Резервная копия')),
+          hl('backupsave', ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Icons.save_alt), title: const Text('Сохранить копию'), subtitle: const Text('Правила, настройки, названия и свои серверы в одном файле'), onTap: () => backupDialog(context, m, restore: false))),
+          hl('backuprestore', ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Icons.restore), title: const Text('Восстановить из копии'), onTap: () => backupDialog(context, m, restore: true))),
           const Divider(height: 32),
-          title('Диагностика'),
+          hl('diag', title('Диагностика')),
           nav(Icons.fact_check_outlined, 'Диагностический отчёт', 'Тесты DNS, связи, WARP и узлов одной кнопкой; файл для разбора неполадок', () => push(ReportPage(model: m))),
           nav(Icons.travel_explore, 'Что видят сайты', 'Адрес, страна по нескольким базам, тип адреса, часовой пояс, IPv6, DNS', () => push(DiagnosticsPage(model: m))),
-          if (Platform.isAndroid) ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Icons.share), title: const Text('Поделиться журналом'), subtitle: const Text('Файл для разбора неполадок'), onTap: AndroidCore.shareLogs),
+          if (Platform.isAndroid) hl('sharelogs', ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Icons.share), title: const Text('Поделиться журналом'), subtitle: const Text('Файл для разбора неполадок'), onTap: AndroidCore.shareLogs)),
         ];
       case _Sec.about:
         final u = m.status?.update;
         return [
-          title('Версия'),
+          hl('version', title('Версия')),
           ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Icons.verified_outlined), title: Text('Brod ${(m.status?.version ?? '').split('-').first}'), subtitle: Text(m.status?.version ?? '')),
           const SizedBox(height: 8),
           title('Обновление приложения'),
           nav(Icons.system_update_alt, 'Проверка и установка', u != null ? 'Доступна версия ${u.app}${u.download == 'ready' ? ' · скачана и проверена' : ''}' : 'Проверка, скачивание, установка', () => showUpdateDialog(context, m)),
-          SwitchListTile(
+          hl('autocheck', SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('Проверять обновления раз в сутки'),
             subtitle: const Text('Только уведомление; скачивание и установка — по кнопке'),
             value: m.settings['update.check'] != '0',
             onChanged: (v) => m.setSetting('update.check', v ? '1' : '0'),
-          ),
+          )),
         ];
     }
   }
@@ -580,6 +737,26 @@ class _BatteryTileState extends State<_BatteryTile> {
 }
 
 /// Подпись сегмента с иконкой: в одну строку, при нехватке ширины (узкий экран, крупный шрифт системы) уменьшается, а не обрезается.
+/// Якорь внутри раздела: сюда прокручивает результат поиска, и на пару секунд это место подсвечивается.
+class _Anchor extends StatelessWidget {
+  const _Anchor({super.key, required this.lit, required this.child});
+  final bool lit;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    // Material, а не DecoratedBox: ListTile рисует фон и всплески на ближайшем Material, цвет под ним ему мешает; цвет Material плавно меняется сам
+    return Material(
+      type: MaterialType.canvas,
+      color: lit ? cs.primaryContainer.withValues(alpha: 0.7) : Colors.transparent,
+      borderRadius: BorderRadius.circular(12),
+      animationDuration: const Duration(milliseconds: 300),
+      child: child,
+    );
+  }
+}
+
 class _SegLabel extends StatelessWidget {
   const _SegLabel(this.text);
 

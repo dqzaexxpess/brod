@@ -46,4 +46,32 @@ void welcomeTest() {
     expect(Prefs.load(f).welcomeDone, true);
     dir.deleteSync(recursive: true);
   });
+
+  test('свой цвет и размер текста сохраняются; палитра расширена без сдвига прежних индексов', () {
+    expect(accentPalette[3].$2, 0xFFE0803F, reason: 'прежние индексы не меняются: сохранённый выбор остаётся тем же');
+    expect(accentPalette.length, greaterThan(6));
+    final dir = Directory.systemTemp.createTempSync('brod-prefs');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final f = File('${dir.path}/app.json');
+    final p = Prefs.load(f);
+    expect(p.textScale, 1.0);
+    p.update(accent: -1, customAccent: 0xFF3F7DE0, textScale: 1.15);
+    final q = Prefs.load(f);
+    expect(q.accent, -1);
+    expect(q.accentColor.toARGB32(), 0xFF3F7DE0);
+    expect(q.textScale, 1.15);
+    // повреждённые значения не ломают загрузку: размер текста в пределах, свой цвет без значения — обычный акцент
+    f.writeAsStringSync('{"accent":-1,"text_scale":9}');
+    final r = Prefs.load(f);
+    expect(r.textScale, 1.4);
+    expect(r.accent, 0);
+  });
+
+  test('HEX-цвет разбирается с решёткой и без, мусор отвергается', () {
+    expect(parseHexColor('#3F7DE0')?.toARGB32(), 0xFF3F7DE0);
+    expect(parseHexColor(' 3f7de0 ')?.toARGB32(), 0xFF3F7DE0);
+    for (final bad in ['', '#12345', '#1234567', 'gggggg', '#3F7DE0FF']) {
+      expect(parseHexColor(bad), isNull, reason: bad);
+    }
+  });
 }

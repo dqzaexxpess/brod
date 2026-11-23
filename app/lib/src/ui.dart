@@ -48,6 +48,8 @@ class VpnApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: theme(Brightness.light),
       darkTheme: theme(Brightness.dark),
+      // размер текста: системный множитель умножается на выбранный в настройках, итог ограничен (при двойном увеличении интерфейс не ломается)
+      builder: (context, child) => MediaQuery(data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear((MediaQuery.textScalerOf(context).scale(1.0) * p.textScale).clamp(0.8, 2.0))), child: child!),
       themeMode: switch (p.themeMode) { 'light' => ThemeMode.light, 'dark' => ThemeMode.dark, _ => ThemeMode.system },
       home: Shell(model: model, prefs: prefs, onQuit: onQuit),
     );
@@ -143,7 +145,7 @@ class _ShellState extends State<Shell> {
             1 => NodesPage(model: m, visible: true, prefs: widget.prefs),
             2 => ProxiesPage(model: m, visible: true),
             3 => MonitorPage(model: m, visible: true),
-            4 => SettingsPage(model: m, visible: true, prefs: widget.prefs, onQuit: widget.onQuit),
+            4 => SettingsPage(model: m, visible: true, prefs: widget.prefs, onQuit: widget.onQuit, onShowNodes: () => setState(() => _tab = 1)),
             _ => HomePage(model: m, onPickNode: () => setState(() => _tab = 1)),
           },
         );

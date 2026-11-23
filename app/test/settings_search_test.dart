@@ -28,4 +28,11 @@ void main() {
     expect(r.first.title, 'Раздавать прокси в локальную сеть');
     expect(r.length, 2);
   });
+
+  test('окончания не мешают: «серверы» находит «сервер», «обновления» — «обновление»', () {
+    const e = [SearchEntry('Мои серверы', 'nodes', 'свой сервер'), SearchEntry('Обновление приложения', 'about', 'обновить')];
+    expect(searchSettings('серверы', e).single.title, 'Мои серверы');
+    expect(searchSettings('обновления', e).single.title, 'Обновление приложения');
+    expect(searchSettings('сервера', e).single.title, 'Мои серверы');
+  });
 }

@@ -355,3 +355,39 @@ func TestConnectBestVerifiesWithRealRequest(t *testing.T) {
 		})
 	}
 }
+
+// Быстрый и отзывчивый узел с «грязным» IP обходит медленный с чистым, но чистый средний по скорости всё же выигрывает у быстрого грязного.
+func TestBestScoreSpeedBeatsCleanliness(t *testing.T) {
+	no := false
+	dirtyFast := NodeView{LatencyMs: 50, SpeedKBps: 6400, Exit: &ExitView{Clean: CleanDirty, GoogleOK: &no}} // ~50 Мбит/с
+	yes := true
+	cleanSlow := NodeView{LatencyMs: 800, SpeedKBps: 256, YouTube: true, GoogleAPI: true, Exit: &ExitView{Clean: CleanClean, GoogleOK: &yes}}    // ~2 Мбит/с, пинг 0,8 с
+	cleanMedium := NodeView{LatencyMs: 200, SpeedKBps: 1920, YouTube: true, GoogleAPI: true, Exit: &ExitView{Clean: CleanClean, GoogleOK: &yes}} // ~15 Мбит/с
+	if bestScore(dirtyFast) <= bestScore(cleanSlow) {
+		t.Fatalf("быстрый грязный (%.1f) должен обходить медленный чистый (%.1f)", bestScore(dirtyFast), bestScore(cleanSlow))
+	}
+	if bestScore(cleanMedium) <= bestScore(dirtyFast) {
+		t.Fatalf("чистый средний (%.1f) должен обходить быстрый грязный (%.1f)", bestScore(cleanMedium), bestScore(dirtyFast))
+	}
+}
+
+// Верх списка узлов совпадает с выбором «лучшего узла»: среди живых порядок по оценке, а не по давности проверки.
+func TestNodesListOrderMatchesBest(t *testing.T) {
+	c := startCore(t, t.TempDir())
+	slow, fast := addNode(t, c, "ord-slow"), addNode(t, c, "ord-fast")
+	now := time.Now()
+	_ = c.st.Record([]store.Row{
+		{Node: fast, Net: c.netKey(), NodeClass: "direct/tcp/none", Level: 2, OK: true, LatencyMs: 80, At: now.Add(-20 * time.Minute)},
+		{Node: slow, Net: c.netKey(), NodeClass: "direct/tcp/none", Level: 2, OK: true, LatencyMs: 900, At: now}, // проверен позже
+	})
+	_ = c.st.PutSpeed(store.SpeedRec{Node: fast, KBps: 6400, At: now})
+	_ = c.st.PutSpeed(store.SpeedRec{Node: slow, KBps: 128, At: now})
+	list, err := c.Nodes(NodesQuery{Alive: true, Limit: 10})
+	if err != nil || len(list) != 2 {
+		t.Fatalf("список: %v %v", list, err)
+	}
+	best, _ := c.BestNodes(10)
+	if list[0].ID != fast || best[0].ID != fast {
+		t.Fatalf("первым должен быть быстрый узел и в списке, и в «лучших»: список %s, лучший %s", list[0].ID[:8], best[0].ID[:8])
+	}
+}

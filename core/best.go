@@ -9,7 +9,11 @@ import (
 	"brod/store"
 )
 
-// bestScore оценивает узел для выбора «лучшего»: чистота и YouTube важнее скорости, скорость важнее пинга; свои серверы и избранные — с бонусом.
+// bestScore оценивает узел для выбора «лучшего». Скорость и пинг решают главное: быстрый отзывчивый узел с «грязным» IP должен обходить медленный
+// с чистым (чистота и YouTube — бонусы, а не главное). Свои серверы и избранные — с бонусом.
+//
+//	скорость: +1 за каждый Мбит/с, до +60;  пинг: −1 за каждые 25 мс, но не больше −60;
+//	чистота IP: чистый +20, смешанный +5, грязный −10;  YouTube +12, Google API +6.
 func bestScore(v NodeView) float64 {
 	sc := 0.0
 	if v.Own {
@@ -21,24 +25,24 @@ func bestScore(v NodeView) float64 {
 	if v.Exit != nil {
 		switch v.Exit.Clean {
 		case CleanClean:
-			sc += 30
+			sc += 20
 		case CleanMixed:
-			sc += 10
+			sc += 5
 		case CleanDirty:
-			sc -= 20
+			sc -= 10
 		}
 	}
 	if v.YouTube {
-		sc += 20
+		sc += 12
 	}
 	if v.GoogleAPI {
-		sc += 10
+		sc += 6
 	}
 	if v.SpeedKBps > 0 {
-		sc += min(v.SpeedKBps*8/1024, 30) // до 30 Мбит/с
+		sc += min(v.SpeedKBps*8/1024, 60)
 	}
 	if v.LatencyMs > 0 {
-		sc -= float64(v.LatencyMs) / 50 // 500 мс = −10
+		sc -= min(float64(v.LatencyMs)/25, 60)
 	}
 	return sc
 }

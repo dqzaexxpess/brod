@@ -32,13 +32,13 @@ License: GPL-3.0. Ready-made builds for Linux, Windows and Android are on the [R
 ## Features
 
 **Nodes**
-- Fetches subscriptions in parallel, with mirrors and a cache: link lists, base64, sing-box JSON, Clash YAML and Xray JSON configs (only the nodes are taken from configs). Parses vless, vmess, trojan, ss, ssr, hysteria/hysteria2, tuic, anytls, socks and wireguard links (including AmneziaWG) and nodes with HTTP obfuscation. Understands Throne deep links (`throne://add/…`) and wg-quick configs. Removes duplicates. If a source reports subscription details (the `subscription-userinfo` header), the sources list shows the remaining traffic and the expiry date.
+- Fetches subscriptions in parallel, with mirrors and a cache: link lists, base64, sing-box JSON, Clash YAML and Xray JSON configs (only the nodes are taken from configs). Parses vless, vmess, trojan, ss, ssr, hysteria/hysteria2, tuic, anytls, socks and wireguard links (including AmneziaWG) and nodes with HTTP obfuscation. Understands Throne deep links (`throne://add/…`) and wg-quick configs. Removes duplicates. If a source reports subscription details (the `subscription-userinfo` header), the sources list shows the remaining traffic and the expiry date, and you get a notification three days before the expiry or when less than a tenth of the traffic is left (once per stage).
 - Finds new sources by itself: reads the READMEs of known repositories, measures how alive their links are, merges sources with identical content. It adds nothing without you: you confirm the candidates.
 - Checks nodes on the current network (results are tied to it): handshake, HTTPS, Google API reachability, targets (YouTube, Telegram, your own). Shows ping, speed, country, address cleanliness and suitability for calls ([how the labels are produced](#how-nodes-get-their-labels)).
 
 **Choosing**
 - By default the active node changes only by your command. Refreshing subscriptions, checks and a network change do not touch it. If a node stops answering, you get a notification with three freshly verified alternatives; an automatic swap can be enabled in settings.
-- "Best node": scored by speed, ping, address cleanliness, YouTube and stability over the last day (share of successful checks, flapping, recent failures); before connecting, the first three candidates are verified with a real request. The node list can be sorted by freshness of the check, ping, speed, country, cleanliness and protocol.
+- "Best node": a score in which speed and ping matter most (a fast node with a "dirty" address beats a slow one with a clean address), then address cleanliness, YouTube and stability over the last day (share of successful checks, flapping, recent failures); before connecting, the first three candidates are verified with a real request. The node list is sorted by the same score by default (the "Best first" mode); other sorts are available: by freshness of the check, ping, speed, country, cleanliness and protocol.
 - Targets: `youtube`, `telegram`, `google-api` and targets registered by other apps each have their own node, check and policy (`sticky-manual` or `auto-failover`).
 - Your own server: `deploy/vps/install-xray-reality.sh` sets up VLESS + Reality on your VPS; paste the link into the app.
 
@@ -48,18 +48,18 @@ License: GPL-3.0. Ready-made builds for Linux, Windows and Android are on the [R
 - Kill switch: nftables on Linux, WFP filters on Windows. The rules stay if the daemon crashes and are removed from the app.
 - SNI spoofing (`tls_spoof`, Linux and Windows) for networks that filter by site name; FakeIP ("Fast DNS", experimental).
 - WARP: the account is created on first start (one request to Cloudflare; disable on desktop with `--no-warp-register`), a "WARP → node" chain for checks and connections, and a search for a working endpoint on your network.
-- Proxy chains: "My servers" → chain icon: 2–3 nodes in a row (client → hop → … → exit). A chain works like a regular node, is checked along the whole path and is never picked by auto-selection. WireGuard may be the first hop (the other hops go through it). "Check hops" in a chain's menu shows which hop is not answering (hops over UDP cannot be checked directly).
+- Proxy chains: "My servers" → chain icon: 2–3 nodes in a row (client → hop → … → exit). A chain works like a regular node, is checked along the whole path and is never picked by auto-selection. WireGuard may be the first hop (the other hops go through it). "Check hops" in a chain's menu shows which hop is not answering; the active chain is also checked automatically every 5 minutes, and if a hop does not answer twice in a row you get a notification (hops over UDP cannot be checked directly).
 - Sharing a proxy on the local network (Settings): other devices on your network connect to Brod as to a proxy (SOCKS5 and HTTP on one port, with a login and password).
 - Android: `vless://`, `vmess://`, `trojan://` and other links open in Brod with an "add this server?" prompt; Brod can offer to add a link you copied (can be turned off in settings). If the system stops the app while the VPN is on, the service asks to be restarted, but on some firmwares (confirmed on HyperOS) it does not happen: on the next launch Brod tells you that the VPN turned off and you have to turn it on again.
 
 **Sharing and search**
 - QR code and link: the server and rule-profile menus have "Show QR code". The other device points the stock camera at it and, on Android, the link opens in Brod (a node: `vless://` etc.; a rule profile: `brod://route/…`; both ask "add?" and a profile does not switch on by itself). A server QR contains its password or key. Links that are too long are passed as text.
-- Settings → search bar: finds a setting or feature by name and by everyday words and takes you to the right section.
+- Settings → search bar: finds a setting or feature by name and by everyday words (word endings do not matter). It opens pages directly and scrolls to and highlights other settings; for actions from a node's menu (QR, ping, speed, calls) it tells you where they are.
 
 **Other**
 - First-run wizard (what a node is, the modes, a warning about free servers, how to enable automatic swap).
 - Diagnostic report (Settings → Data and diagnostics): DNS, connectivity, WARP and sample-node tests, conclusions by rules, one file for troubleshooting; server addresses and node names are masked in it.
-- Appearance: light, dark and system themes, six accent colors, pure-black background (AMOLED), compact node list.
+- Appearance: light, dark and system themes, 14 accent colors and a custom color by HEX, pure-black background (AMOLED), text size (smaller, normal, larger, largest), compact node list.
 - Proxies for Telegram (MTProto): a list, checks, a connect button.
 - A local proxy on `127.0.0.1` with a login and password for other apps; an HTTP API and events (SSE) with tokens.
 - Backup and restore, tray, notifications, in-app updates (signed, see [Security](#security)).
@@ -157,7 +157,7 @@ Other commands: `brodctl help` (`status`, `list`, `connect`, `fav`, `pin`, `test
 - The HTTP API listens only on `127.0.0.1`, requires a token, and rejects requests with an `Origin` (a browser) or a foreign `Host`. App tokens are limited to their targets, and the rules of targets that an app registers are limited to domains; `allow_direct` for them can only be granted by the owner.
 - Unencrypted nodes are hidden by default; nodes with `allowInsecure` are marked.
 - Subscriptions are other people's data: links are parsed without being executed, and only nodes are taken from full configs.
-- Updates are signed with an ed25519 key whose public part is built into the program: a swapped file on the host or in transit will not pass verification. Two keys are built in for the release manifest, a primary and a reserve one (in case the primary is lost); the reserve one is valid since 0.4.9. The sources list and the release manifest are kept in [brod-releases](https://github.com/dqzaexxpess/brod-releases) (mirrored on GitLab). Android builds are signed with a separate key.
+- Updates are signed with an ed25519 key whose public part is built into the program: a swapped file on the host or in transit will not pass verification. Two keys are built in for the release manifest, a primary and a reserve one (in case the primary is lost); the reserve one is valid since 0.4.9 (earlier versions do not have it). The sources list and the release manifest are kept in [brod-releases](https://github.com/dqzaexxpess/brod-releases) (mirrored on GitLab). Android builds are signed with a separate key.
 - On Linux, installing updates is done by a small root helper (`cmd/brod-helper`, polkit): it accepts only signed archives.
 
 ## Android permissions

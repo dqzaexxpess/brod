@@ -23,17 +23,19 @@ const (
 	EvTargetSwitch  = "target-switch"  // узел цели сменился
 	EvTargetDegrade = "target-degraded"
 	EvTargetOK      = "target-recovered"
-	EvNode          = "node"        // действия над узлом (избранное, закрепление)
-	EvSource        = "source"      // изменения источников
-	EvUpdate        = "update"      // обновление приложения: доступна новая версия / файл скачан и проверен
-	EvSetting       = "setting"     // изменения настроек
-	EvError         = "error"       // внутренняя ошибка фонового задания
-	EvStarted       = "started"     // демон запущен
-	EvStopped       = "stopped"     // демон остановлен
-	EvTargetChange  = "target"      // цель зарегистрирована/изменена/удалена
-	EvRouteVia      = "route-via"   // выход правила маршрутизации перепривязан (страна/узел/запасной вариант)
-	EvProbe         = "probe-run"   // итог пакетной проверки
-	EvNotifyTest    = "notify-test" // проверка уведомлений (нажатие тестовой кнопки)
+	EvNode          = "node"         // действия над узлом (избранное, закрепление)
+	EvSource        = "source"       // изменения источников
+	EvChainHop      = "chain-hop"    // звено активной цепочки не отвечает
+	EvSubscription  = "subscription" // подписка: срок скоро кончится или кончился, трафик на исходе
+	EvUpdate        = "update"       // обновление приложения: доступна новая версия / файл скачан и проверен
+	EvSetting       = "setting"      // изменения настроек
+	EvError         = "error"        // внутренняя ошибка фонового задания
+	EvStarted       = "started"      // демон запущен
+	EvStopped       = "stopped"      // демон остановлен
+	EvTargetChange  = "target"       // цель зарегистрирована/изменена/удалена
+	EvRouteVia      = "route-via"    // выход правила маршрутизации перепривязан (страна/узел/запасной вариант)
+	EvProbe         = "probe-run"    // итог пакетной проверки
+	EvNotifyTest    = "notify-test"  // проверка уведомлений (нажатие тестовой кнопки)
 )
 
 // Bus сохраняет события в журнал и рассылает подписчикам. Медленный подписчик не тормозит остальных: при переполнении

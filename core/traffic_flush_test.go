@@ -45,6 +45,10 @@ func TestTrafficFlushDoesNotBlockLoop(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("trafficTick ждёт запись в базу")
 	}
+	// запись стартует в своей горутине: ждём её первого вызова, иначе проверка иногда обгоняет запуск
+	for end := time.Now().Add(2 * time.Second); calls.Load() == 0 && time.Now().Before(end); {
+		time.Sleep(time.Millisecond)
+	}
 	if n := calls.Load(); n != 1 {
 		t.Fatalf("записей одновременно %d, ждали 1", n)
 	}

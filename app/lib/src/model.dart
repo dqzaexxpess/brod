@@ -19,9 +19,10 @@ import 'timing.dart';
 enum Phase { starting, ready, failed }
 
 /// Порядок списка узлов.
-enum NodeSort { fresh, favorites, ping, speed, country, clean, proto, server }
+enum NodeSort { best, fresh, favorites, ping, speed, country, clean, proto, server }
 
 const nodeSortNames = <NodeSort, String>{
+  NodeSort.best: 'Лучшие сверху',
   NodeSort.fresh: 'Свежие проверки',
   NodeSort.favorites: 'Избранные сначала',
   NodeSort.ping: 'По пингу',
@@ -90,7 +91,7 @@ class AppModel extends ChangeNotifier {
   bool youtubeOnly = false;
   String search = '';
   String? countryFilter; // ISO-код выбранной страны
-  NodeSort sort = NodeSort.fresh;
+  NodeSort sort = NodeSort.best;
   // выбор узлов для пакетного замера
   bool selecting = false;
   Set<String> selected = {};
@@ -146,6 +147,12 @@ class AppModel extends ChangeNotifier {
   set toast(String? v) {
     _toastText = v;
     toastError = false;
+  }
+
+  /// Короткая подсказка во всплывающем сообщении.
+  void showHint(String text) {
+    toast = text;
+    _notify();
   }
 
   /// Сообщение об ошибке (в уведомлении — красным значком и дольше на экране).
@@ -1011,6 +1018,8 @@ class AppModel extends ChangeNotifier {
     }).toList();
     int byFresh(NodeDto a, NodeDto b) => (b.l2At ?? DateTime.fromMillisecondsSinceEpoch(0)).compareTo(a.l2At ?? DateTime.fromMillisecondsSinceEpoch(0));
     switch (sort) {
+      case NodeSort.best:
+        break; // порядок задаёт ядро: по той же оценке, что выбирает «лучший узел»
       case NodeSort.fresh:
         l.sort(byFresh);
       case NodeSort.favorites:
