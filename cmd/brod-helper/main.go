@@ -94,7 +94,11 @@ func run(args []string, out, errw io.Writer) int {
 			return "", err
 		}
 		syscall.Umask(0o022)
-		in := &installer{lib: libDir, key: key, uid: uid, home: home, maxArchive: maxArchive, setcap: runSetcap}
+		keys := []ed25519.PublicKey{key}
+		if releasesKey == ota.ReleasesPublicKey { // боевая сборка: принимается и резервный ключ; в тестовой (-X releasesKey) только временный
+			keys = ota.ReleasesKeys()
+		}
+		in := &installer{lib: libDir, keys: keys, uid: uid, home: home, maxArchive: maxArchive, setcap: runSetcap}
 		return in.install(args[1], args[2], args[3])
 	}()
 	if err != nil {

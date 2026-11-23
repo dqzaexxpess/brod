@@ -52,7 +52,7 @@ func (a *LinuxApply) logf(f string, v ...any) {
 // новому brodd прямо в каталоге stage (xattr переживает переименование), и только потом меняем каталоги. Отказ в пароле — установка не
 // начиналась, прежняя версия на месте.
 func (a *LinuxApply) Run() (err error) {
-	waited, swapped := false, false // программы закрыты / каталоги уже заменены
+	waited, swapped, daemonDone := false, false, false // программы закрыты / каталоги заменены / brodd уже поставлен помощником
 	defer func() {
 		r := Result{At: time.Now().UTC(), From: a.From, To: a.To, OK: err == nil}
 		if err != nil {
@@ -99,6 +99,10 @@ func (a *LinuxApply) Run() (err error) {
 	}
 	a.logf("замена каталога %s", a.Target)
 	if err := SwapDir(a.Stage, a.Target); err != nil {
+		if daemonDone {
+			// откат brodd потребовал бы ещё одной привилегированной команды помощника; повторная установка той же версии безопасна и завершит обновление
+			return fmt.Errorf("%w (brodd в %s уже новой версии, приложение прежней: повторите обновление)", err, DaemonDir)
+		}
 		return err
 	}
 	swapped = true

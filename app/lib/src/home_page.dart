@@ -10,7 +10,6 @@ import 'platform_text.dart';
 import 'tray.dart';
 import 'update_dialog.dart';
 import 'widgets.dart';
-import 'win_version.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key, required this.model, this.onPickNode});
@@ -94,10 +93,6 @@ class HomePage extends StatelessWidget {
           const SizedBox(height: 16),
           _Banner(text: 'Работает другой VPN (${vpn.conflict.join(', ')}). Выключите его, иначе Brod не включится.'),
         ],
-      if (Platform.isWindows && oldWindowsWarning(Platform.operatingSystemVersion) != null) ...[
-        const SizedBox(height: 16),
-        _OldWindowsNote(text: oldWindowsWarning(Platform.operatingSystemVersion)!),
-      ],
       if (Platform.isAndroid) ...[const _BatteryNote()],
       if (model.status?.update != null) ...[const SizedBox(height: 16), UpdateBanner(model: model)],
       if ((model.status?.warpEnabled ?? false) && (model.status?.warpDownMin ?? 0) >= 5) ...[const SizedBox(height: 16), _UdpNote(minutes: model.status!.warpDownMin)],
@@ -243,40 +238,6 @@ class _Banner extends StatelessWidget {
           Icon(Icons.warning_amber, color: cs.onErrorContainer),
           const SizedBox(width: 10),
           Expanded(child: Text(text, style: TextStyle(color: cs.onErrorContainer))),
-        ]),
-      ),
-    );
-  }
-}
-
-/// Android в фоне (экран выключен, телефон лежит) закрывает приложению сеть, если оно не исключено из оптимизации батареи: проверки узлов,
-/// WARP и подбор профиля тогда молча не работают (в журнале `sendmsg: operation not permitted`). Пока исключения нет, на главной плашка.
-/// Сведение о старой Windows: закрывается до следующего запуска приложения (постоянно не прячется: сбой реален, пока система старая).
-class _OldWindowsNote extends StatefulWidget {
-  const _OldWindowsNote({required this.text});
-
-  final String text;
-
-  @override
-  State<_OldWindowsNote> createState() => _OldWindowsNoteState();
-}
-
-class _OldWindowsNoteState extends State<_OldWindowsNote> {
-  static bool _hidden = false;
-
-  @override
-  Widget build(BuildContext context) {
-    if (_hidden) return const SizedBox.shrink();
-    final cs = Theme.of(context).colorScheme;
-    return Card.filled(
-      color: cs.surfaceContainerHigh,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
-        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Icon(Icons.info_outline, color: cs.primary),
-          const SizedBox(width: 10),
-          Expanded(child: Padding(padding: const EdgeInsets.only(top: 2), child: Text(widget.text, style: Theme.of(context).textTheme.bodySmall))),
-          IconButton(tooltip: 'Скрыть', icon: const Icon(Icons.close, size: 18), onPressed: () => setState(() => _hidden = true)),
         ]),
       ),
     );

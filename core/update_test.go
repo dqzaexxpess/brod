@@ -59,7 +59,7 @@ func (r *updRig) manifest(pubVer int, app string, data []byte, platforms ...stri
 
 func (r *updRig) apply(pubVer int, app string, data []byte, platforms ...string) (UpdateInfo, error) {
 	doc, sig := r.manifest(pubVer, app, data, platforms...)
-	return r.c.applyUpdateManifest(doc, sig, r.pub, "test")
+	return r.c.applyUpdateManifest(doc, sig, []ed25519.PublicKey{r.pub}, "test")
 }
 
 func TestUpdateManifestAvailabilityAndAnnounce(t *testing.T) {
@@ -97,22 +97,22 @@ func TestUpdateManifestRejections(t *testing.T) {
 	// чужая подпись
 	_, otherPriv, _ := ed25519.GenerateKey(rand.Reader)
 	badSig := []byte(base64.StdEncoding.EncodeToString(ed25519.Sign(otherPriv, doc)))
-	if u, err := r.c.applyUpdateManifest(doc, badSig, r.pub, "test"); err == nil || u.Available || !strings.Contains(u.Error, "отвергнут") {
+	if u, err := r.c.applyUpdateManifest(doc, badSig, []ed25519.PublicKey{r.pub}, "test"); err == nil || u.Available || !strings.Contains(u.Error, "отвергнут") {
 		t.Fatalf("чужая подпись принята: %v, %+v", err, u)
 	}
 	// подпись другого документа
 	other, _ := r.manifest(5, "0.9.0", data)
-	if _, err := r.c.applyUpdateManifest(other, sig, r.pub, "test"); err == nil {
+	if _, err := r.c.applyUpdateManifest(other, sig, []ed25519.PublicKey{r.pub}, "test"); err == nil {
 		t.Fatal("подпись не от этого документа принята")
 	}
 	// разбор: неизвестное поле
 	evil := []byte(strings.Replace(string(doc), `"version":5`, `"version":5,"evil":1`, 1))
 	evilSig := []byte(base64.StdEncoding.EncodeToString(ed25519.Sign(r.priv, evil)))
-	if _, err := r.c.applyUpdateManifest(evil, evilSig, r.pub, "test"); err == nil {
+	if _, err := r.c.applyUpdateManifest(evil, evilSig, []ed25519.PublicKey{r.pub}, "test"); err == nil {
 		t.Fatal("манифест с неизвестным полем принят")
 	}
 	// принять честный, затем старее виденного — откат
-	if u, err := r.c.applyUpdateManifest(doc, sig, r.pub, "test"); err != nil || !u.Available {
+	if u, err := r.c.applyUpdateManifest(doc, sig, []ed25519.PublicKey{r.pub}, "test"); err != nil || !u.Available {
 		t.Fatalf("честный манифест: %v, %+v", err, u)
 	}
 	if _, err := r.apply(4, "0.4.0", data); err == nil || !strings.Contains(err.Error(), "откат") {

@@ -12,6 +12,7 @@ import 'own_page.dart';
 import 'prefs.dart';
 import 'report_page.dart';
 import 'rules_page.dart';
+import 'settings_search.dart';
 import 'sources_page.dart';
 import 'user_sets_page.dart';
 import 'warp_page.dart';
@@ -56,6 +57,7 @@ class _SettingsPageState extends State<SettingsPage> {
   String? _autostartError;
   final _tick = ValueNotifier<int>(0); // перерисовка открытого раздела при изменении локального состояния
   _Sec _sel = _Sec.connection;
+  final _query = TextEditingController();
 
   /// Разделы, которые есть на этой платформе и при этих данных.
   List<_Sec> get _secs => [
@@ -103,8 +105,64 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   void dispose() {
+    _query.dispose();
     _tick.dispose();
     super.dispose();
+  }
+
+
+  /// Всё, что можно найти поиском: настройки и функции с их разделом и словами, по которым их ищут. Платформенные пункты — только там, где есть.
+  List<SearchEntry> get _index {
+    final android = Platform.isAndroid;
+    return [
+      const SearchEntry('Автоподключение VPN', 'connection', 'запуск после перезагрузки включать сам постоянный vpn always-on'),
+      const SearchEntry('Если выход перестал отвечать', 'connection', 'автозамена узла переключать сам предложить сменить деградация сбой узел умер'),
+      const SearchEntry('Киллсвитч', 'connection', 'защита от утечек блокировка интернета без vpn kill switch утечка'),
+      if (android) const SearchEntry('Работа в фоне', 'connection', 'батарея экономия энергии оптимизация не убивать приложение фон'),
+      const SearchEntry('Правила маршрутизации', 'routing', 'что через vpn напрямую блокировать профили домены маршруты split'),
+      if (android) const SearchEntry('VPN для приложений', 'routing', 'приложения исключить только выбранные раздельное туннелирование'),
+      const SearchEntry('Свои списки', 'routing', 'rule-set наборы правил подписка на список адресов'),
+      if (!android) const SearchEntry('Быстрый DNS (FakeIP)', 'routing', 'dns fakeip днс ускорение эксперимент'),
+      const SearchEntry('Раздавать прокси в локальную сеть', 'routing', 'lan телевизор консоль второй компьютер socks http прокси для других устройств раздача'),
+      const SearchEntry('Списки блокировок', 'routing', 'заблокированное в рф банки только внутри рф обновить rule-set'),
+      const SearchEntry('Мои серверы', 'nodes', 'свой сервер ссылка vless vmess trojan shadowsocks wireguard добавить цепочка прокси хоп hop'),
+      const SearchEntry('Источники подписок', 'nodes', 'подписка subscription url список узлов квота трафик срок'),
+      const SearchEntry('Cloudflare WARP', 'nodes', 'warp варп аккаунт wireguard подбор endpoint'),
+      const SearchEntry('Проверять узлы через WARP', 'nodes', 'warp проверка узлов цепочка'),
+      const SearchEntry('Загрузить аккаунт WARP из файла', 'nodes', 'warp-account.json импорт аккаунта'),
+      const SearchEntry('Какие уведомления показывать', 'notify', 'уведомления оповещения важные все выключить тишина'),
+      const SearchEntry('Тема', 'look', 'тёмная светлая системная цвет акцент оформление'),
+      const SearchEntry('Чисто чёрный фон (AMOLED)', 'look', 'amoled чёрная тема экран'),
+      const SearchEntry('Список узлов', 'look', 'плотный компактный группировка по странам'),
+      if (android) const SearchEntry('Предлагать добавить ссылку из буфера обмена', 'look', 'буфер обмена clipboard ссылка vless вставка импорт'),
+      if (_hasSystem && Autostart.supported) const SearchEntry('Запускать при входе в систему', 'system', 'автозапуск автозагрузка старт с системой'),
+      if (_hasSystem && !android) const SearchEntry('Запускать свёрнутым в трей', 'system', 'трей скрытый запуск окно не показывать'),
+      if (_hasSystem && !android) const SearchEntry('Крестик сворачивает в трей', 'system', 'закрытие окна выход трей фон'),
+      const SearchEntry('Резервная копия', 'data', 'сохранить восстановить бэкап экспорт импорт настроек правил серверов'),
+      const SearchEntry('Диагностический отчёт', 'data', 'отчёт диагностика тесты dns связи warp логи неполадки проблема не работает'),
+      const SearchEntry('Что видят сайты', 'data', 'мой ip адрес страна утечка dns webrtc анонимность проверка'),
+      if (android) const SearchEntry('Поделиться журналом', 'data', 'лог журнал файл для разбора неполадок'),
+      const SearchEntry('Версия и обновление приложения', 'about', 'обновить скачать новая версия проверка обновлений ota'),
+      const SearchEntry('Проверять обновления раз в сутки', 'about', 'автообновление уведомление о новой версии'),
+    ];
+  }
+
+  _Sec? _secById(String id) {
+    for (final s in _Sec.values) {
+      if (s.name == id) return s;
+    }
+    return null;
+  }
+
+  void _openSection(BuildContext context, _Sec sec, bool wide) {
+    if (wide) {
+      setState(() {
+        _sel = sec;
+        _query.clear();
+      });
+    } else {
+      Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => _SectionScreen(title: _secInfo[sec]!.title, changes: _changes, builder: (c) => _section(c, sec))));
+    }
   }
 
   Listenable get _changes => Listenable.merge([widget.model, _tick, if (widget.prefs != null) widget.prefs!]);
@@ -122,23 +180,41 @@ class _SettingsPageState extends State<SettingsPage> {
           final list = ListView(padding: const EdgeInsets.all(8), children: [
             // место под полосу занято всегда: если вставлять её только на время сохранения, список при прокрутке дёргается на её высоту
             SizedBox(height: 2, child: m.settingsLoading ? const LinearProgressIndicator(minHeight: 2) : null),
-            for (final sec in secs)
-              ListTile(
-                leading: Icon(_secInfo[sec]!.icon),
-                title: Text(_secInfo[sec]!.title),
-                subtitle: Text(_summary(sec, m), maxLines: 2, overflow: TextOverflow.ellipsis),
-                trailing: wide ? null : const Icon(Icons.chevron_right),
-                selected: wide && sec == _sel,
-                selectedTileColor: Theme.of(context).colorScheme.secondaryContainer.withValues(alpha: 0.5),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                onTap: () {
-                  if (wide) {
-                    setState(() => _sel = sec);
-                  } else {
-                    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => _SectionScreen(title: _secInfo[sec]!.title, changes: _changes, builder: (c) => _section(c, sec))));
-                  }
-                },
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+              child: SearchBar(
+                controller: _query,
+                hintText: 'Найти настройку или функцию',
+                leading: const Icon(Icons.search),
+                elevation: const WidgetStatePropertyAll(0),
+                trailing: [if (_query.text.isNotEmpty) IconButton(icon: const Icon(Icons.close), tooltip: 'Очистить', onPressed: () => setState(_query.clear))],
+                onChanged: (_) => setState(() {}),
               ),
+            ),
+            if (_query.text.trim().isNotEmpty) ...[
+              for (final e in searchSettings(_query.text, _index))
+                if (_secById(e.section) case final sec? when secs.contains(sec))
+                  ListTile(
+                    leading: Icon(_secInfo[sec]!.icon),
+                    title: Text(e.title),
+                    subtitle: Text(_secInfo[sec]!.title),
+                    trailing: wide ? null : const Icon(Icons.chevron_right),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    onTap: () => _openSection(context, sec, wide),
+                  ),
+              if (searchSettings(_query.text, _index).isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('Ничего не найдено. Попробуйте другое слово: «прокси», «киллсвитч», «обновление».')),
+            ] else
+              for (final sec in secs)
+                ListTile(
+                  leading: Icon(_secInfo[sec]!.icon),
+                  title: Text(_secInfo[sec]!.title),
+                  subtitle: Text(_summary(sec, m), maxLines: 2, overflow: TextOverflow.ellipsis),
+                  trailing: wide ? null : const Icon(Icons.chevron_right),
+                  selected: wide && sec == _sel,
+                  selectedTileColor: Theme.of(context).colorScheme.secondaryContainer.withValues(alpha: 0.5),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  onTap: () => _openSection(context, sec, wide),
+                ),
           ]);
           if (!wide) return list;
           return Row(children: [

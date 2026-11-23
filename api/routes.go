@@ -175,6 +175,7 @@ func (s *Server) routes(m *http.ServeMux) {
 	m.HandleFunc("PUT /v1/tg-proxies/{id}/favorite", s.tgFavorite)
 	m.HandleFunc("POST /v1/own-nodes", s.ownAdd)
 	m.HandleFunc("POST /v1/chains", s.chainAdd)
+	m.HandleFunc("GET /v1/chains/{id}/check", s.chainCheck)
 	m.HandleFunc("DELETE /v1/own-nodes/{id}", s.ownDelete)
 	m.HandleFunc("PATCH /v1/own-nodes/{id}", s.ownEdit)
 	m.HandleFunc("PUT /v1/nodes/{id}/label", s.nodeLabel)
@@ -1754,4 +1755,22 @@ func (s *Server) chainAdd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 201, map[string]any{"id": id})
+}
+
+// chainCheck проверяет каждое звено цепочки отдельно и возвращает список {id, proto, server, port, state, ms, detail}.
+func (s *Server) chainCheck(w http.ResponseWriter, r *http.Request) {
+	if !onlyUser(w, r) {
+		return
+	}
+	id, err := s.core().ResolveNode(r.PathValue("id"))
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	hops, err := s.core().CheckChain(r.Context(), id)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"hops": hops})
 }

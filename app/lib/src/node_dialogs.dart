@@ -159,3 +159,63 @@ Future<void> chainDialog(BuildContext context, AppModel model) async {
   );
   if (ok == true) await model.addChain(name.text.trim(), [for (final n in chosen) n.id]);
 }
+
+/// Проверка звеньев цепочки: какое звено не отвечает. При сбое предлагает собрать цепочку заново из других узлов.
+Future<void> chainCheckDialog(BuildContext context, AppModel model, NodeDto chain) async {
+  late final Future<List<HopCheckDto>> res;
+  res = model.api.checkChain(chain.id);
+  await showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Звенья цепочки'),
+      content: SizedBox(
+        width: 360,
+        child: FutureBuilder<List<HopCheckDto>>(
+          future: res,
+          builder: (ctx, snap) {
+            if (snap.hasError) return Text('Не удалось проверить: ${snap.error}');
+            final hops = snap.data;
+            if (hops == null) return const Row(children: [SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)), SizedBox(width: 12), Text('Проверяю…')]);
+            final cs = Theme.of(ctx).colorScheme;
+            final dead = [for (var i = 0; i < hops.length; i++) if (hops[i].state == 'fail') i + 1];
+            return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              for (var i = 0; i < hops.length; i++)
+                ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: switch (hops[i].state) {
+                    'ok' => Icon(Icons.check_circle_outline, color: cs.primary),
+                    'fail' => Icon(Icons.error_outline, color: cs.error),
+                    _ => Icon(Icons.help_outline, color: cs.onSurfaceVariant),
+                  },
+                  title: Text('${i + 1}. ${hops[i].server}:${hops[i].port}', overflow: TextOverflow.ellipsis),
+                  subtitle: Text(switch (hops[i].state) {
+                    'ok' => '${hops[i].proto} · отвечает${hops[i].ms > 0 ? ' · ${hops[i].ms} мс' : ''}',
+                    'fail' => '${hops[i].proto} · не отвечает${hops[i].detail.isEmpty ? '' : ': ${hops[i].detail}'}',
+                    _ => '${hops[i].proto} · на UDP, напрямую не проверяется',
+                  }),
+                ),
+              const SizedBox(height: 8),
+              Text(
+                dead.isEmpty
+                    ? 'Серверы звеньев отвечают. Если цепочка всё равно не работает, причина может быть в самих звеньях (не принимают подключение от предыдущего).'
+                    : 'Не отвечает ${dead.length == 1 ? 'звено ${dead.first}' : 'звенья ${dead.join(', ')}'}. Замените ${dead.length == 1 ? 'его' : 'их'}: соберите цепочку заново из других узлов.',
+                style: TextStyle(fontSize: 12, color: dead.isEmpty ? cs.onSurfaceVariant : cs.error),
+              ),
+            ]);
+          },
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Закрыть')),
+        TextButton(
+          onPressed: () {
+            Navigator.pop(ctx);
+            chainDialog(context, model);
+          },
+          child: const Text('Собрать заново'),
+        ),
+      ],
+    ),
+  );
+}

@@ -279,3 +279,79 @@ func TestActiveBrief(t *testing.T) {
 		t.Fatalf("страна = %q, нужно NL", k)
 	}
 }
+
+func TestStabilityBonusOrdersFlakyBelowSteady(t *testing.T) {
+	steady := stabilityBonus(store.Stability{OK: 20})
+	flaky := stabilityBonus(store.Stability{OK: 10, Fail: 10, Flips: 8, Recent: 2})
+	young := stabilityBonus(store.Stability{OK: 2})
+	if !(steady > young && young == 0 && flaky < young) {
+		t.Fatalf("стабильный %.1f, без данных %.1f, мигающий %.1f", steady, young, flaky)
+	}
+}
+
+// Быстрый, но мигающий узел уступает чуть более медленному и стабильному.
+func TestBestNodesPrefersStableOverFlaky(t *testing.T) {
+	c := startCore(t, t.TempDir())
+	flaky, steady := addNode(t, c, "flaky"), addNode(t, c, "steady")
+	now := time.Now()
+	var rows []store.Row
+	for i := 0; i < 12; i++ {
+		at := now.Add(-time.Duration(12-i) * time.Hour / 2)
+		rows = append(rows, store.Row{Node: steady, Net: c.netKey(), NodeClass: "direct/tcp/none", Level: 2, OK: true, LatencyMs: 300, At: at})
+		rows = append(rows, store.Row{Node: flaky, Net: c.netKey(), NodeClass: "direct/tcp/none", Level: 2, OK: i%2 == 0, LatencyMs: 100, At: at})
+	}
+	// последняя проверка обоих — успех: оба «живы»
+	rows = append(rows, store.Row{Node: flaky, Net: c.netKey(), NodeClass: "direct/tcp/none", Level: 2, OK: true, LatencyMs: 100, At: now})
+	rows = append(rows, store.Row{Node: steady, Net: c.netKey(), NodeClass: "direct/tcp/none", Level: 2, OK: true, LatencyMs: 300, At: now})
+	if err := c.st.Record(rows); err != nil {
+		t.Fatal(err)
+	}
+	best, err := c.BestNodes(10)
+	if err != nil || len(best) != 2 {
+		t.Fatalf("лучшие: %v %v", best, err)
+	}
+	if best[0].ID != steady {
+		t.Fatalf("первым должен быть стабильный узел, а не мигающий: %s", best[0].ID[:8])
+	}
+}
+
+// Лучший по оценке узел не пропустил реальный запрос: выбирается следующий; если не прошёл никто — остаётся лучший по оценке.
+func TestConnectBestVerifiesWithRealRequest(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		results []bool // исходы быстрой проверки по порядку вызовов
+		want    string // "best" — первый по оценке, "second" — второй
+	}{
+		{"первый не прошёл — берётся второй", []bool{false, true}, "second"},
+		{"никто не прошёл — остаётся лучший по оценке", []bool{false, false, false}, "best"},
+		{"первый прошёл", []bool{true}, "best"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var calls atomic.Int32
+			c := cfgCore(t, func(cfg *Config) {
+				cfg.Quick = func(context.Context, *engine.Probe) prober.Result {
+					i := int(calls.Add(1)) - 1
+					ok := i < len(tc.results) && tc.results[i]
+					return prober.Result{Level: 2, OK: ok, Target: "quick"}
+				}
+			})
+			best, second := addNode(t, c, "vb-best"), addNode(t, c, "vb-second")
+			now := time.Now()
+			_ = c.st.Record([]store.Row{
+				{Node: best, Net: c.netKey(), NodeClass: "direct/tcp/none", Level: 2, OK: true, LatencyMs: 100, At: now},
+				{Node: second, Net: c.netKey(), NodeClass: "direct/tcp/none", Level: 2, OK: true, LatencyMs: 900, At: now},
+			})
+			v, err := c.ConnectBest("user")
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := map[string]string{"best": best, "second": second}[tc.want]
+			if v.ID != want {
+				t.Fatalf("выбран %s, ожидался %s", v.ID[:8], want[:8])
+			}
+			if sel, _ := c.st.Selection(store.ScopeActive); sel.Node != want {
+				t.Fatalf("активен %s, ожидался %s", sel.Node[:8], want[:8])
+			}
+		})
+	}
+}

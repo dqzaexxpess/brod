@@ -532,13 +532,21 @@ func (c *Core) healthLoop(ctx context.Context) {
 	defer net.Stop()
 	// netlink сообщает о смене сети сразу; опрос остаётся запасным путём (другая ОС, ошибка подписки)
 	var netEvents <-chan struct{}
-	if !c.cfg.NoNetlink {
+	subscribe := func() {
+		if c.cfg.NoNetlink {
+			return
+		}
 		if ch, err := netwatch.Watch(ctx); err == nil {
 			netEvents = ch
 			// события приходят сами; опрос остаётся страховкой на случай пропущенного события, поэтому в десять раз реже (30 с вместо 3 с)
 			net.Reset(c.cfg.NetInterval * 10)
 		}
 	}
+	subscribe()
+	// подписка могла оборваться (ошибка чтения netlink): тогда возвращаем частый опрос и пробуем подписаться снова
+	resub := time.NewTimer(time.Hour)
+	resub.Stop()
+	defer resub.Stop()
 	for {
 		select {
 		case <-ctx.Done():
@@ -546,12 +554,21 @@ func (c *Core) healthLoop(ctx context.Context) {
 		case _, ok := <-netEvents:
 			if !ok {
 				netEvents = nil
+				net.Reset(c.cfg.NetInterval)
+				resub.Reset(10 * time.Second)
 				continue
 			}
 			if ctx.Err() != nil { // select выбирает случайный готовый случай: при остановке не начинаем обращение к базе
 				return
 			}
 			c.CheckNetwork()
+		case <-resub.C:
+			if netEvents == nil && ctx.Err() == nil {
+				subscribe()
+				if netEvents == nil && !c.cfg.NoNetlink {
+					resub.Reset(30 * time.Second)
+				}
+			}
 		case <-net.C:
 			if ctx.Err() != nil {
 				return

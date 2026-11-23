@@ -28,3 +28,16 @@ String nodeLinkSummary(String link) {
   if (host.isEmpty || host.length > 80) return scheme;
   return '$scheme · $host';
 }
+
+/// Префикс ссылки на профиль правил (так же, как в ядре: core.shareLinkPrefix).
+const profileLinkPrefix = 'brod://route/';
+
+/// Текст — ссылка на профиль правил маршрутизации brod://route/…
+bool looksLikeProfileLink(String? text) {
+  if (text == null) return false;
+  final t = text.trim();
+  return t.length > profileLinkPrefix.length && t.length <= 20000 && !t.contains(' ') && !t.contains('\n') && t.startsWith(profileLinkPrefix);
+}
+
+/// Ссылка, которую Brod умеет принять: узел или профиль правил.
+bool looksLikeImportLink(String? text) => looksLikeNodeLink(text) || looksLikeProfileLink(text);

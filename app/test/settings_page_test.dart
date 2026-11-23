@@ -65,4 +65,35 @@ void main() {
     expect((m.api as _Api).puts, contains('update.check=0'));
     m.dispose();
   });
+
+  testWidgets('поиск: находит настройку по синониму и ведёт в её раздел', (tester) async {
+    final m = await _pump(tester, const Size(420, 900));
+    await tester.enterText(find.byType(SearchBar), 'телевизор');
+    await tester.pumpAndSettle();
+    expect(find.text('Раздавать прокси в локальную сеть'), findsOneWidget);
+    expect(find.text('Подключение'), findsNothing, reason: 'вместо списка разделов — результаты');
+    await tester.tap(find.text('Раздавать прокси в локальную сеть'));
+    await tester.pumpAndSettle();
+    expect(find.text('Правила маршрутизации'), findsOneWidget, reason: 'открылась «Маршрутизация»');
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(SearchBar), 'абракадабра');
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Ничего не найдено'), findsOneWidget);
+    await tester.tap(find.byTooltip('Очистить'));
+    await tester.pumpAndSettle();
+    expect(find.text('Подключение'), findsOneWidget, reason: 'после очистки снова список разделов');
+    m.dispose();
+  });
+
+  testWidgets('поиск на широком окне: выбор результата открывает раздел справа и сбрасывает запрос', (tester) async {
+    final m = await _pump(tester, const Size(1200, 800));
+    await tester.enterText(find.byType(SearchBar), 'киллсвитч');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Киллсвитч').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Защита от утечек'), findsOneWidget);
+    expect(find.text('Подключение'), findsOneWidget, reason: 'список разделов вернулся');
+    m.dispose();
+  });
 }

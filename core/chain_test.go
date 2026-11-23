@@ -422,3 +422,45 @@ func TestChainWireGuardAsFirstHop(t *testing.T) {
 		t.Error("WireGuard-звено осталось в движке после удаления цепочки")
 	}
 }
+
+func TestCheckChainFindsDeadHop(t *testing.T) {
+	c := newCore(t, t.TempDir())
+	t.Cleanup(func() { c.Close() })
+	alive, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Skip("нет loopback TCP:", err)
+	}
+	defer alive.Close()
+	go func() {
+		for {
+			cn, err := alive.Accept()
+			if err != nil {
+				return
+			}
+			cn.Close()
+		}
+	}()
+	dead, _ := net.Listen("tcp", "127.0.0.1:0")
+	deadPort := dead.Addr().(*net.TCPAddr).Port
+	dead.Close() // порт свободен и никем не слушается
+	a := socksNode(t, c, "chk-a", alive.Addr().(*net.TCPAddr).Port, "socks")
+	b := socksNode(t, c, "chk-b", deadPort, "socks")
+	u := socksNode(t, c, "chk-u", 9, "hysteria2")
+	id, err := c.AddChain("", []string{a, b, u}, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := c.CheckChain(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 3 || got[0].State != "ok" || got[1].State != "fail" || got[2].State != "skip" {
+		t.Fatalf("состояния звеньев: %+v", got)
+	}
+	if got[1].Detail == "" {
+		t.Error("у упавшего звена нет причины")
+	}
+	if _, err := c.CheckChain(context.Background(), a); !errors.Is(err, ErrInvalid) {
+		t.Errorf("не цепочка: ожидалась ErrInvalid, получено %v", err)
+	}
+}

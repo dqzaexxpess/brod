@@ -29,7 +29,7 @@ const (
 
 type installer struct {
 	lib        string // каталог установки (/usr/local/lib/brod)
-	key        ed25519.PublicKey
+	keys       []ed25519.PublicKey
 	uid        int    // вызвавший (PKEXEC_UID)
 	home       string // его домашний каталог из базы пользователей
 	maxArchive int64
@@ -61,7 +61,7 @@ func (in *installer) install(archive, manifest, sig string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := ota.Verify(in.key, doc, sigb); err != nil {
+	if err := ota.VerifyAny(in.keys, doc, sigb); err != nil {
 		return "", fail(exitSig, "манифест отвергнут: %v", err)
 	}
 	d, err := ota.ParseReleases(doc)

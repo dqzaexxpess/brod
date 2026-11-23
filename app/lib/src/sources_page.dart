@@ -142,7 +142,12 @@ class SourceTile extends StatelessWidget {
               ),
             ]),
           )
-        : null;
+        : s.expire == null
+            ? null
+            : Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text('Подписка действует до ${s.expire!.toLocal().toString().substring(0, 10)}', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
+              );
     return ListTile(
       contentPadding: EdgeInsets.zero,
       title: Text(s.title.isNotEmpty ? '${s.name} · ${s.title}' : s.name, overflow: TextOverflow.ellipsis),

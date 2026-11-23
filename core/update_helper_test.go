@@ -2,6 +2,7 @@ package core
 
 import (
 	"bytes"
+	"crypto/ed25519"
 	"os"
 	"testing"
 )
@@ -12,7 +13,7 @@ func TestUpdateManifestSavedForHelper(t *testing.T) {
 	r := newUpdRig(t, "0.3.0")
 	data := []byte("release-bytes")
 	doc, sig := r.manifest(3, "0.4.0", data)
-	if _, err := r.c.applyUpdateManifest(doc, sig, r.pub, "test"); err != nil {
+	if _, err := r.c.applyUpdateManifest(doc, sig, []ed25519.PublicKey{r.pub}, "test"); err != nil {
 		t.Fatal(err)
 	}
 	dp, sp := r.c.releaseManifestPaths()

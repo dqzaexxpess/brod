@@ -1,13 +1,18 @@
 package core
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
+	"brod/prober"
 	"brod/store"
 )
 
@@ -253,4 +258,65 @@ func withoutChains(recs []store.NodeRec) []store.NodeRec {
 		}
 	}
 	return out
+}
+
+// HopCheck — итог проверки одного звена цепочки: достижим ли его сервер по TCP напрямую. Звенья на UDP (hysteria2, tuic, WireGuard) так
+// не проверить: они помечаются skip, а не ok.
+type HopCheck struct {
+	ID     string `json:"id"`
+	Proto  string `json:"proto"`
+	Server string `json:"server"`
+	Port   int    `json:"port"`
+	State  string `json:"state"` // ok | fail | skip
+	Ms     int64  `json:"ms,omitempty"`
+	Detail string `json:"detail,omitempty"`
+}
+
+// hopUDPOnly: звено работает поверх UDP, проверка TCP-соединением к нему бессмысленна.
+func hopUDPOnly(h ChainHop) bool {
+	if hopIsWG(h) {
+		return true
+	}
+	switch strings.ToLower(h.Proto) {
+	case "hysteria", "hysteria2", "hy2", "tuic":
+		return true
+	}
+	return false
+}
+
+// CheckChain проверяет каждое звено цепочки отдельно (TCP к серверу звена напрямую), чтобы при сбое цепочки было видно, какое звено умерло.
+// Звенья проверяются одновременно, предел времени на каждое — 5 с.
+func (c *Core) CheckChain(ctx context.Context, id string) ([]HopCheck, error) {
+	rec, err := c.st.Node(id)
+	if err != nil {
+		return nil, fmt.Errorf("узел %s: %w", short(id), ErrNoNode)
+	}
+	if !isChain(rec) {
+		return nil, fmt.Errorf("%w: узел не цепочка", ErrInvalid)
+	}
+	spec, err := parseChain(rec)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]HopCheck, len(spec.Hops))
+	var wg sync.WaitGroup
+	for i, h := range spec.Hops {
+		out[i] = HopCheck{ID: h.ID, Proto: h.Proto, Server: h.Server, Port: h.Port, State: "skip", Detail: "звено на UDP: напрямую не проверяется"}
+		if hopUDPOnly(h) {
+			continue
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			r := prober.L1(ctx, net.JoinHostPort(h.Server, strconv.Itoa(h.Port)), 5*time.Second)
+			out[i].Ms, out[i].Detail = r.LatencyMs, ""
+			if r.OK {
+				out[i].State = "ok"
+				return
+			}
+			out[i].State, out[i].Detail = "fail", r.Detail
+		}()
+	}
+	wg.Wait()
+	return out, nil
 }

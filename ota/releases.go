@@ -23,10 +23,42 @@ import (
 // подписать приложение, и наоборот. Закрытая часть — ~/.config/brod/releases-signing.key (вне репозитория, резервная копия за владельцем).
 const ReleasesPublicKey = "jNVer/OvSB1HbMUL4At27UZ/vtZ0wY1iGmWTnVfAGCw="
 
-// ReleasesKey возвращает вшитый открытый ключ релизов.
+// ReleasesReservePublicKey — резервный открытый ключ подписи релизов: клиент принимает манифест с подписью любого из двух ключей. Нужен на случай
+// потери или компрометации основного (иначе уже выпущенные приложения перестали бы принимать обновления). Закрытая часть хранится отдельно от
+// основной и в репозиторий не попадает; пользоваться ею — только если основной ключ потерян или скомпрометирован.
+const ReleasesReservePublicKey = "qHkd137sjNtfpzpkKQXsiCs/jyCQz0VugRFaVTNW8e8="
+
+// ReleasesKey возвращает вшитый основной открытый ключ релизов.
 func ReleasesKey() ed25519.PublicKey {
 	b, _ := base64.StdEncoding.DecodeString(ReleasesPublicKey)
 	return ed25519.PublicKey(b)
+}
+
+// ReleasesKeys — все вшитые ключи подписи релизов: основной и резервный.
+func ReleasesKeys() []ed25519.PublicKey {
+	keys := []ed25519.PublicKey{ReleasesKey()}
+	if b, err := base64.StdEncoding.DecodeString(ReleasesReservePublicKey); err == nil && len(b) == ed25519.PublicKeySize {
+		keys = append(keys, ed25519.PublicKey(b))
+	}
+	return keys
+}
+
+// VerifyAny принимает подпись, если её удостоверяет любой из ключей.
+func VerifyAny(keys []ed25519.PublicKey, doc, sig []byte) error {
+	var first error
+	for _, k := range keys {
+		err := Verify(k, doc, sig)
+		if err == nil {
+			return nil
+		}
+		if first == nil {
+			first = err
+		}
+	}
+	if first == nil {
+		first = errors.New("нет ключей для проверки подписи")
+	}
+	return first
 }
 
 const (

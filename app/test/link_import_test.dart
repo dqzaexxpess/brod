@@ -59,4 +59,18 @@ void main() {
     p.update(clipboardImport: false);
     expect(p.clipboardImport, false);
   });
+
+  test('ссылка на профиль правил узнаётся; её принимает и оболочка, а обычная https-ссылка нет', () {
+    expect(looksLikeProfileLink('brod://route/eyJydWxlcyI6W119'), true);
+    for (final bad in [null, '', 'brod://route/', 'brod://other/abc', 'https://example.org', 'brod://route/a b', 'brod://route/a\nb']) {
+      expect(looksLikeProfileLink(bad), false, reason: '$bad');
+    }
+    expect(looksLikeImportLink('brod://route/abc'), true);
+    expect(looksLikeImportLink('vless://u@h:1'), true);
+    expect(looksLikeImportLink('https://x'), false);
+    final m = AppModel(_Api());
+    m.offerImport('brod://route/abc');
+    expect(m.importOffer, 'brod://route/abc');
+    m.dispose();
+  });
 }

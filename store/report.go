@@ -142,3 +142,75 @@ func (s *Store) SampleDomains(n int) ([]string, error) {
 	}
 	return out, rows.Err()
 }
+
+// Stability — как вёл себя узел на проверках уровня L2 за период в одной сети.
+type Stability struct {
+	OK, Fail int
+	Flips    int // сколько раз исход менялся между соседними проверками (успех↔провал): «мигающий» узел
+	Recent   int // провалов за последние recent
+}
+
+// Ratio — доля успехов; 0, false — данных нет.
+func (s Stability) Ratio() (float64, bool) {
+	if s.OK+s.Fail == 0 {
+		return 0, false
+	}
+	return float64(s.OK) / float64(s.OK+s.Fail), true
+}
+
+// NodeStability считает Stability по проверкам L2 для перечисленных узлов в сети net за период since; провалы после recent идут в Recent.
+// Узлы без проверок в результат не попадают.
+func (s *Store) NodeStability(net string, ids []string, since, recent time.Time) (map[string]Stability, error) {
+	out := make(map[string]Stability, len(ids))
+	const chunk = 400 // предел переменных SQLite — 999
+	for i := 0; i < len(ids); i += chunk {
+		part := ids[i:min(i+chunk, len(ids))]
+		args := make([]any, 0, len(part)+2)
+		args = append(args, net, since.Unix())
+		ph := make([]byte, 0, len(part)*2)
+		for j, id := range part {
+			if j > 0 {
+				ph = append(ph, ',')
+			}
+			ph = append(ph, '?')
+			args = append(args, id)
+		}
+		rows, err := s.rd.Query(`SELECT node, ok, at FROM probes WHERE net=? AND level=2 AND at>=? AND node IN (`+string(ph)+`) ORDER BY node, at`, args...)
+		if err != nil {
+			return nil, err
+		}
+		prev, prevNode := -1, ""
+		for rows.Next() {
+			var node string
+			var ok int
+			var at int64
+			if err := rows.Scan(&node, &ok, &at); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			st := out[node]
+			if node != prevNode {
+				prev = -1
+			}
+			if ok != 0 {
+				st.OK++
+			} else {
+				st.Fail++
+				if at >= recent.Unix() {
+					st.Recent++
+				}
+			}
+			if prev >= 0 && prev != min(ok, 1) {
+				st.Flips++
+			}
+			prev, prevNode = min(ok, 1), node
+			out[node] = st
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}

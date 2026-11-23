@@ -372,6 +372,9 @@ class FakeApi implements DaemonApi {
   final chains = <(String, List<String>)>[];
 
   @override
+  Future<List<HopCheckDto>> checkChain(String id) async => const [];
+
+  @override
   Future<String> addChain(String name, List<String> hops) async {
     chains.add((name, hops));
     return 'chain-id';

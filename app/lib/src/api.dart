@@ -759,6 +759,27 @@ class NodeDto {
 }
 
 /// Звено цепочки прокси из `GET /v1/nodes`.
+/// Итог проверки звена цепочки: ok — сервер звена отвечает, fail — нет, skip — звено на UDP, напрямую не проверяется.
+class HopCheckDto {
+  const HopCheckDto({required this.server, required this.port, required this.proto, required this.state, this.ms = 0, this.detail = ''});
+
+  final String server;
+  final int port;
+  final String proto;
+  final String state;
+  final int ms;
+  final String detail;
+
+  factory HopCheckDto.fromJson(Map<String, dynamic> j) => HopCheckDto(
+        server: (j['server'] as String?) ?? '',
+        port: (j['port'] as num?)?.toInt() ?? 0,
+        proto: (j['proto'] as String?) ?? '',
+        state: (j['state'] as String?) ?? 'skip',
+        ms: (j['ms'] as num?)?.toInt() ?? 0,
+        detail: (j['detail'] as String?) ?? '',
+      );
+}
+
 class ChainHopDto {
   const ChainHopDto({required this.id, required this.proto, required this.server, required this.port});
 
@@ -1113,6 +1134,7 @@ abstract class DaemonApi {
   Future<List<NodeDto>> nodes({bool alive = false, bool favorites = false, int limit = 300, String source = ''});
   Future<String> addOwn(String text); // человекочитаемый итог
   Future<String> addChain(String name, List<String> hops); // цепочка прокси из узлов (от первого звена к выходу); возвращает id
+  Future<List<HopCheckDto>> checkChain(String id); // проверка каждого звена цепочки отдельно
   Future<ProxyShareDto> proxyShare(); // раздача прокси в локальную сеть: включена ли, адреса, порт, логин и пароль (секрет)
   Future<void> removeOwn(String id);
   Future<String> nodeLink(String id); // ссылка «поделиться» (с секретами)
@@ -1387,6 +1409,10 @@ class UnixApi implements DaemonApi {
 
   @override
   Future<ProxyShareDto> proxyShare() async => ProxyShareDto.fromJson(await _call('GET', '/v1/app-proxy'));
+
+  @override
+  Future<List<HopCheckDto>> checkChain(String id) async =>
+      [for (final h in ((await _call('GET', '/v1/chains/$id/check'))['hops'] as List? ?? const [])) HopCheckDto.fromJson(h as Map<String, dynamic>)];
 
   @override
   Future<String> addChain(String name, List<String> hops) async => ((await _call('POST', '/v1/chains', {'name': name, 'hops': hops}))['id'] as String?) ?? '';

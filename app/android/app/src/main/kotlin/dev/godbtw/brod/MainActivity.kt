@@ -46,7 +46,14 @@ class MainActivity : FlutterActivity() {
         }
         // после убийства процесса системой запись службы и уведомление «VPN включён» остаются (службу держит привязка VPN-фреймворка), а ядра и
         // туннеля уже нет: в свежем процессе службы нет (instance == null), значит любая оставшаяся запись — мёртвая
-        if (BrodVpnService.instance == null) stopService(Intent(this, BrodVpnService::class.java))
+        if (BrodVpnService.instance == null) {
+            stopService(Intent(this, BrodVpnService::class.java))
+            // система убила процесс при включённом VPN и не перезапустила службу (так делает HyperOS): честно сказать, что туннеля нет
+            if (CoreHost.vpnWanted(this)) {
+                CoreHost.setVpnWanted(this, false)
+                android.widget.Toast.makeText(this, "Система остановила Brod, VPN выключился. Включите его снова.", android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
         channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).also { it.setMethodCallHandler { call, result -> handle(call, result) } }
         rememberLink(intent)
     }

@@ -80,3 +80,30 @@ func TestParseSources(t *testing.T) {
 		t.Error("список из более чем MaxSources принят")
 	}
 }
+
+func TestReleasesKeysAcceptEitherAndRejectOthers(t *testing.T) {
+	keys := ReleasesKeys()
+	if len(keys) != 2 || keys[0].Equal(keys[1]) {
+		t.Fatalf("ожидались два разных ключа релизов, получено %d", len(keys))
+	}
+	doc := []byte(`{"version":1}`)
+	sign := func(priv ed25519.PrivateKey) []byte {
+		return []byte(base64.StdEncoding.EncodeToString(ed25519.Sign(priv, doc)))
+	}
+	// подпись одним из вшитых ключей в тесте не получить (закрытых частей нет): проверяем механизм на подставных парах
+	pubA, privA, _ := ed25519.GenerateKey(nil)
+	pubB, privB, _ := ed25519.GenerateKey(nil)
+	_, privC, _ := ed25519.GenerateKey(nil)
+	pair := []ed25519.PublicKey{pubA, pubB}
+	for _, p := range []ed25519.PrivateKey{privA, privB} {
+		if err := VerifyAny(pair, doc, sign(p)); err != nil {
+			t.Fatalf("подпись одного из ключей отвергнута: %v", err)
+		}
+	}
+	if err := VerifyAny(pair, doc, sign(privC)); err == nil {
+		t.Fatal("подпись постороннего ключа принята")
+	}
+	if err := VerifyAny(nil, doc, sign(privA)); err == nil {
+		t.Fatal("без ключей подпись принята")
+	}
+}

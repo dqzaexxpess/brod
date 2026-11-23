@@ -56,6 +56,13 @@
                 <data android:scheme="tuic"/>
                 <data android:scheme="wireguard"/>
             </intent-filter>
+            <!-- ссылка на профиль правил brod://route/…: отдельный фильтр, потому что host из одного фильтра применился бы и к схемам узлов выше -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="brod" android:host="route"/>
+            </intent-filter>
         </activity>
         <service
             android:name=".BrodTileService"

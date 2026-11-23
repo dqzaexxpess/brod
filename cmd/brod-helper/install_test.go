@@ -47,7 +47,7 @@ func newFixture(t *testing.T) *fixture {
 	if err := os.Chmod(f.lib, 0o755); err != nil { // t.TempDir подчиняется umask (при umask 002 — запись для группы)
 		t.Fatal(err)
 	}
-	f.in = &installer{lib: f.lib, key: pub, uid: os.Getuid(), home: f.home, maxArchive: maxArchive,
+	f.in = &installer{lib: f.lib, keys: []ed25519.PublicKey{pub}, uid: os.Getuid(), home: f.home, maxArchive: maxArchive,
 		setcap: func(file string) error { f.setcaps = append(f.setcaps, file); return nil }}
 	return f
 }

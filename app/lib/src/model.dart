@@ -1367,7 +1367,7 @@ class AppModel extends ChangeNotifier {
 
   /// Предложить добавить узел по ссылке. Ссылка из внешнего приложения предлагается всегда; из буфера — один раз на ссылку.
   void offerImport(String link, {bool fromClipboard = false}) {
-    if (!looksLikeNodeLink(link)) return;
+    if (!looksLikeImportLink(link)) return;
     final l = link.trim();
     if (fromClipboard) {
       if (l == _lastClipOffer) return;
@@ -1382,7 +1382,7 @@ class AppModel extends ChangeNotifier {
     try {
       final d = await Clipboard.getData(Clipboard.kTextPlain);
       final t = d?.text;
-      if (looksLikeNodeLink(t)) offerImport(t!, fromClipboard: true);
+      if (looksLikeImportLink(t)) offerImport(t!, fromClipboard: true);
     } catch (_) {}
   }
 

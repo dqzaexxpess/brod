@@ -6,6 +6,7 @@ import 'api.dart';
 import 'country.dart';
 import 'model.dart';
 import 'node_dialogs.dart';
+import 'qr_dialog.dart';
 import 'prefs.dart';
 import 'widgets.dart';
 
@@ -441,6 +442,15 @@ class NodeTile extends StatelessWidget {
                 await editOwnDialog(context, model, node);
               case 'share':
                 await model.shareNode(node);
+              case 'qr':
+                try {
+                  final link = await model.api.nodeLink(node.id);
+                  if (context.mounted) await showQrDialog(context, title: 'QR-код сервера', link: link, secret: true);
+                } catch (e) {
+                  model.toast = 'Не удалось получить ссылку: $e';
+                }
+              case 'chaincheck':
+                await chainCheckDialog(context, model, node);
               case 'ping':
                 await model.startMeasure(ping: true, ids: [node.id]);
               case 'speed':
@@ -456,7 +466,9 @@ class NodeTile extends StatelessWidget {
           itemBuilder: (_) => [
             const PopupMenuItem(value: 'rename', child: ListTile(dense: true, leading: Icon(Icons.drive_file_rename_outline), title: Text('Переименовать'))),
             if (node.own && !node.isChain) const PopupMenuItem(value: 'edit', child: ListTile(dense: true, leading: Icon(Icons.edit_outlined), title: Text('Изменить сервер'))),
+            if (!node.isChain) const PopupMenuItem(value: 'qr', child: ListTile(dense: true, leading: Icon(Icons.qr_code_2), title: Text('Показать QR-код'))),
             if (!node.isChain) const PopupMenuItem(value: 'share', child: ListTile(dense: true, leading: Icon(Icons.share_outlined), title: Text('Поделиться ссылкой'))),
+            if (node.isChain) const PopupMenuItem(value: 'chaincheck', child: ListTile(dense: true, leading: Icon(Icons.rule), title: Text('Проверить звенья'))),
             const PopupMenuItem(value: 'ping', child: ListTile(dense: true, leading: Icon(Icons.network_ping), title: Text('Проверить пинг'))),
             const PopupMenuItem(value: 'speed', child: ListTile(dense: true, leading: Icon(Icons.speed), title: Text('Замерить скорость'))),
             const PopupMenuItem(value: 'calls', child: ListTile(dense: true, leading: Icon(Icons.headset_mic_outlined), title: Text('Проверить для звонков'))),

@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'qr_dialog.dart';
 import 'package:flutter/services.dart';
 
 import 'android_bridge.dart';
@@ -152,6 +153,9 @@ class _RulesPageState extends State<RulesPage> {
                             await Clipboard.setData(ClipboardData(text: link));
                             if (mounted) ScaffoldMessenger.of(this.context).showSnackBar(const SnackBar(content: Text('Ссылка на профиль скопирована')));
                           }
+                        case 'qr':
+                          final link = await m.shareProfile(p.id);
+                          if (link != null && mounted) await showQrDialog(this.context, title: 'QR-код профиля «${p.name}»', link: link);
                         case 'delete':
                           if (await _discardOk()) await m.deleteProfile(p.id);
                       }
@@ -159,6 +163,7 @@ class _RulesPageState extends State<RulesPage> {
                     itemBuilder: (_) => [
                       const PopupMenuItem(value: 'rename', child: Text('Переименовать')),
                       const PopupMenuItem(value: 'share', child: Text('Скопировать ссылку')),
+                      const PopupMenuItem(value: 'qr', child: Text('Показать QR-код')),
                       if (!p.active) const PopupMenuItem(value: 'delete', child: Text('Удалить')),
                     ],
                   ),

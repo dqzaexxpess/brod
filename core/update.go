@@ -154,9 +154,9 @@ func (c *Core) CheckUpdate(ctx context.Context, initiator string) (UpdateInfo, e
 	if o := c.updateOverride(); o != "" {
 		urls = []string{o}
 	}
-	key := c.cfg.ReleasesKey
-	if len(key) == 0 {
-		key = ota.ReleasesKey()
+	key := []ed25519.PublicKey{c.cfg.ReleasesKey}
+	if len(c.cfg.ReleasesKey) == 0 {
+		key = ota.ReleasesKeys()
 	}
 	doc, sig, err := c.fetchOTA(ctx, urls, c.updateOverride() != "", c.releasesCheck(key))
 	if errors.Is(err, errHTTPNotFound) {
@@ -184,9 +184,9 @@ func (c *Core) releasesVersionKey() string {
 }
 
 // releasesCheck — проверка манифеста для fetchOTA: подпись, строгий разбор и публикация не старее виденной; негодное зеркало пропускается.
-func (c *Core) releasesCheck(key ed25519.PublicKey) otaCheck {
+func (c *Core) releasesCheck(key []ed25519.PublicKey) otaCheck {
 	return func(doc, sig []byte) error {
-		if err := ota.Verify(key, doc, sig); err != nil {
+		if err := ota.VerifyAny(key, doc, sig); err != nil {
 			return err
 		}
 		d, err := ota.ParseReleasesWith(doc, c.updateOverride() != "")
@@ -211,12 +211,12 @@ func (c *Core) setUpdateError(err error) {
 }
 
 // applyUpdateManifest принимает манифест только с верной подписью, строгим разбором и версией публикации не ниже уже виденной.
-func (c *Core) applyUpdateManifest(doc, sig []byte, key ed25519.PublicKey, initiator string) (UpdateInfo, error) {
+func (c *Core) applyUpdateManifest(doc, sig []byte, key []ed25519.PublicKey, initiator string) (UpdateInfo, error) {
 	fail := func(err error) (UpdateInfo, error) {
 		c.setUpdateError(err)
 		return c.UpdateInfo(), err
 	}
-	if err := ota.Verify(key, doc, sig); err != nil {
+	if err := ota.VerifyAny(key, doc, sig); err != nil {
 		return fail(fmt.Errorf("манифест релизов отвергнут: %w", err))
 	}
 	d, err := ota.ParseReleasesWith(doc, c.updateOverride() != "")

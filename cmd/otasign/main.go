@@ -119,22 +119,22 @@ func main() {
 		if fs.NArg() != 1 {
 			fatal(fmt.Errorf("нужен один файл"))
 		}
-		pk := ota.DefaultKey()
+		pks := []ed25519.PublicKey{ota.DefaultKey()}
 		if isReleases(fs.Arg(0)) {
-			pk = ota.ReleasesKey()
+			pks = ota.ReleasesKeys()
 		}
 		if *pub != "" {
 			b, err := base64.StdEncoding.DecodeString(*pub)
 			if err != nil || len(b) != ed25519.PublicKeySize {
 				fatal(fmt.Errorf("неверный открытый ключ"))
 			}
-			pk = ed25519.PublicKey(b)
+			pks = []ed25519.PublicKey{ed25519.PublicKey(b)}
 		}
 		doc, err := os.ReadFile(fs.Arg(0))
 		fatal(err)
 		sig, err := os.ReadFile(fs.Arg(0) + ".sig")
 		fatal(err)
-		fatal(ota.Verify(pk, doc, sig))
+		fatal(ota.VerifyAny(pks, doc, sig))
 		fmt.Println("подпись верна")
 	case "release":
 		doc := ota.ReleasesDoc{Version: *version, Created: time.Now().UTC().Format(time.RFC3339), Release: ota.Release{App: *app, Assets: map[string]ota.Asset{}}}

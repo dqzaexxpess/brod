@@ -100,6 +100,7 @@ class _ShellState extends State<Shell> {
     if (link == null || _importOpen) return;
     _importOpen = true;
     widget.model.importOffer = null;
+    final profile = looksLikeProfileLink(link);
     Future.microtask(() async {
       if (!mounted) {
         _importOpen = false;
@@ -108,8 +109,10 @@ class _ShellState extends State<Shell> {
       final ok = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('Добавить сервер?'),
-          content: Text('Ссылка на сервер: ${nodeLinkSummary(link)}.\nОн появится в «Моих серверах».'),
+          title: Text(profile ? 'Добавить профиль правил?' : 'Добавить сервер?'),
+          content: Text(profile
+              ? 'Ссылка на профиль правил маршрутизации. Он появится в списке профилей и сам не включится: сначала посмотрите правила.'
+              : 'Ссылка на сервер: ${nodeLinkSummary(link)}.\nОн появится в «Моих серверах».'),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Нет')),
             FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Добавить')),
@@ -117,7 +120,7 @@ class _ShellState extends State<Shell> {
         ),
       );
       _importOpen = false;
-      if (ok == true) await widget.model.addOwn(link);
+      if (ok == true) await (profile ? widget.model.importProfile(link) : widget.model.addOwn(link));
     });
   }
 

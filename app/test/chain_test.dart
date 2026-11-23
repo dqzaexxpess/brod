@@ -20,6 +20,13 @@ class _Api implements DaemonApi {
       ];
 
   @override
+  Future<List<HopCheckDto>> checkChain(String id) async => const [
+        HopCheckDto(server: 'a.example', port: 443, proto: 'vless', state: 'ok', ms: 40),
+        HopCheckDto(server: 'b.example', port: 8443, proto: 'trojan', state: 'fail', detail: 'connection refused'),
+        HopCheckDto(server: 'c.example', port: 443, proto: 'hysteria2', state: 'skip'),
+      ];
+
+  @override
   Future<String> addChain(String name, List<String> hops) async {
     created.add((name, hops));
     return 'new-chain';
@@ -130,6 +137,20 @@ void main() {
     await t.tap(find.widgetWithText(FilledButton, 'Создать'));
     await t.pumpAndSettle();
     expect(api.created.single.$2, ['wg1', 'own2']);
+  });
+
+  testWidgets('проверка звеньев: видно, какое звено не отвечает, и есть путь собрать цепочку заново', (t) async {
+    final m = AppModel(_Api());
+    await t.pumpWidget(MaterialApp(home: Scaffold(body: Builder(builder: (c) => TextButton(onPressed: () => chainCheckDialog(c, m, node('chain1', 'chain', '')), child: const Text('go'))))));
+    await t.tap(find.text('go'));
+    await t.pumpAndSettle();
+    expect(find.textContaining('1. a.example:443'), findsOneWidget);
+    expect(find.textContaining('отвечает · 40 мс'), findsOneWidget);
+    expect(find.textContaining('не отвечает: connection refused'), findsOneWidget);
+    expect(find.textContaining('на UDP, напрямую не проверяется'), findsOneWidget);
+    expect(find.textContaining('Не отвечает звено 2'), findsOneWidget);
+    expect(find.text('Собрать заново'), findsOneWidget);
+    m.dispose();
   });
 }
 
