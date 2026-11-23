@@ -88,6 +88,11 @@ func (c *Core) RemoveOwn(id, initiator string) error {
 	if err := c.st.DeleteOwn(id); err != nil {
 		return err
 	}
+	// у цепочки в движке остались звенья: сначала снимается выход (gc), затем вспомогательные звенья
+	c.mu.Lock()
+	c.gc()
+	c.mu.Unlock()
+	c.dropChainHelpers(id)
 	c.invalidateCounts()
 	c.bus.Publish(store.Event{Kind: EvNode, Initiator: initiator, Node: id, Detail: "свой сервер удалён"})
 	return nil
@@ -137,6 +142,9 @@ func (c *Core) EditOwn(id string, req EditOwnReq, initiator string) error {
 	rec, err := c.st.Node(id)
 	if err != nil {
 		return err
+	}
+	if isChain(rec) {
+		return fmt.Errorf("%w: у цепочки нет своего адреса: звенья задаются при создании (название менять можно)", ErrInvalid)
 	}
 	if rec.Endpoint {
 		return fmt.Errorf("%w: адрес WireGuard-узла меняется заменой ссылкой", ErrInvalid)

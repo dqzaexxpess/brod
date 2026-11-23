@@ -45,6 +45,13 @@ func (c *Core) BestNodes(limit int) ([]NodeView, error) {
 	if err != nil {
 		return nil, err
 	}
+	kept := views[:0]
+	for _, v := range views {
+		if v.Proto != chainProto { // цепочки автоподбор не выбирает
+			kept = append(kept, v)
+		}
+	}
+	views = kept
 	sort.SliceStable(views, func(i, j int) bool { return bestScore(views[i]) > bestScore(views[j]) })
 	if limit > 0 && len(views) > limit {
 		views = views[:limit]

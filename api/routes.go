@@ -20,30 +20,38 @@ import (
 // ---- DTO ----
 
 type nodeDTO struct {
-	ID         string     `json:"id"`
-	Proto      string     `json:"proto"`
-	Class      string     `json:"class"`
-	Server     string     `json:"server"`
-	Port       int        `json:"port"`
-	Favorite   bool       `json:"favorite"`
-	Pinned     bool       `json:"pinned"`
-	Insecure   bool       `json:"insecure"`
-	NoSecurity bool       `json:"no_security"`
-	Present    bool       `json:"present"`
-	L2At       *time.Time `json:"l2_at,omitempty"`
-	GoogleAPI  bool       `json:"google_api"`
-	YouTube    bool       `json:"youtube"`
-	LastFail   *time.Time `json:"last_fail,omitempty"`
-	Notes      []string   `json:"notes,omitempty"`
-	Exit       *exitDTO   `json:"exit,omitempty"`       // что видят сайты на выходе узла; нет, пока не собрано
-	Label      string     `json:"label,omitempty"`      // пользовательское название
-	Own        bool       `json:"own,omitempty"`        // собственный сервер пользователя
-	LatencyMs  int64      `json:"latency_ms,omitempty"` // пинг: задержка последней успешной проверки
-	SpeedKBps  float64    `json:"speed_kbps,omitempty"` // скорость скачивания через узел, КБ/с
-	SpeedAt    *time.Time `json:"speed_at,omitempty"`
-	UDP        string     `json:"udp,omitempty"`    // good | unstable | none: годен ли узел для звонков (замер UDP в текущей сети)
-	UDPMs      int64      `json:"udp_ms,omitempty"` // медиана задержки STUN-ответов
-	UDPAt      *time.Time `json:"udp_at,omitempty"`
+	ID         string        `json:"id"`
+	Proto      string        `json:"proto"`
+	Class      string        `json:"class"`
+	Server     string        `json:"server"`
+	Port       int           `json:"port"`
+	Favorite   bool          `json:"favorite"`
+	Pinned     bool          `json:"pinned"`
+	Insecure   bool          `json:"insecure"`
+	NoSecurity bool          `json:"no_security"`
+	Present    bool          `json:"present"`
+	L2At       *time.Time    `json:"l2_at,omitempty"`
+	GoogleAPI  bool          `json:"google_api"`
+	YouTube    bool          `json:"youtube"`
+	LastFail   *time.Time    `json:"last_fail,omitempty"`
+	Notes      []string      `json:"notes,omitempty"`
+	Exit       *exitDTO      `json:"exit,omitempty"`       // что видят сайты на выходе узла; нет, пока не собрано
+	Label      string        `json:"label,omitempty"`      // пользовательское название
+	Own        bool          `json:"own,omitempty"`        // собственный сервер пользователя
+	LatencyMs  int64         `json:"latency_ms,omitempty"` // пинг: задержка последней успешной проверки
+	SpeedKBps  float64       `json:"speed_kbps,omitempty"` // скорость скачивания через узел, КБ/с
+	SpeedAt    *time.Time    `json:"speed_at,omitempty"`
+	UDP        string        `json:"udp,omitempty"`    // good | unstable | none: годен ли узел для звонков (замер UDP в текущей сети)
+	UDPMs      int64         `json:"udp_ms,omitempty"` // медиана задержки STUN-ответов
+	UDPAt      *time.Time    `json:"udp_at,omitempty"`
+	Chain      []chainHopDTO `json:"chain,omitempty"` // звенья, если это цепочка
+}
+
+type chainHopDTO struct {
+	ID     string `json:"id"`
+	Proto  string `json:"proto"`
+	Server string `json:"server"`
+	Port   int    `json:"port"`
 }
 
 // exitDTO — страна и «чистота» выхода (Cloudflare trace через узел + поведенческие проверки).
@@ -76,6 +84,9 @@ func nodeFromView(v core.NodeView) nodeDTO {
 	d.LatencyMs, d.SpeedKBps, d.SpeedAt, d.Own = v.LatencyMs, v.SpeedKBps, tp(v.SpeedAt), v.Own
 	d.Label = v.Label
 	d.UDP, d.UDPMs, d.UDPAt = v.UDP, v.UDPMs, tp(v.UDPAt)
+	for _, h := range v.Chain {
+		d.Chain = append(d.Chain, chainHopDTO{ID: h.ID, Proto: h.Proto, Server: h.Server, Port: h.Port})
+	}
 	return d
 }
 
@@ -163,6 +174,7 @@ func (s *Server) routes(m *http.ServeMux) {
 	m.HandleFunc("DELETE /v1/tg-proxies/{id}", s.tgDelete)
 	m.HandleFunc("PUT /v1/tg-proxies/{id}/favorite", s.tgFavorite)
 	m.HandleFunc("POST /v1/own-nodes", s.ownAdd)
+	m.HandleFunc("POST /v1/chains", s.chainAdd)
 	m.HandleFunc("DELETE /v1/own-nodes/{id}", s.ownDelete)
 	m.HandleFunc("PATCH /v1/own-nodes/{id}", s.ownEdit)
 	m.HandleFunc("PUT /v1/nodes/{id}/label", s.nodeLabel)
@@ -1705,4 +1717,33 @@ func (s *Server) reportGet(w http.ResponseWriter, r *http.Request) {
 		out["text"] = st.Report.Text()
 	}
 	writeJSON(w, 200, out)
+}
+
+// chainAdd создаёт цепочку прокси из узлов (тело: {"name": "…", "hops": [id, id, …]}, от первого звена к выходу); возвращает её id.
+func (s *Server) chainAdd(w http.ResponseWriter, r *http.Request) {
+	if !onlyUser(w, r) {
+		return
+	}
+	var in struct {
+		Name string   `json:"name"`
+		Hops []string `json:"hops"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	hops := make([]string, len(in.Hops))
+	for i, h := range in.Hops {
+		id, err := s.core().ResolveNode(h) // допускается короткий префикс идентификатора
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		hops[i] = id
+	}
+	id, err := s.core().AddChain(in.Name, hops, caller(r))
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, 201, map[string]any{"id": id})
 }

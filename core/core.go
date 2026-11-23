@@ -106,7 +106,9 @@ type Core struct {
 	loopsMu       sync.Mutex
 	loops         map[string]int // работающие фоновые задания по имени (для журнала долгой остановки)
 	appUser       string
-	warpOn        bool                     // аккаунт WARP загружен, endpoint поднят
+	warpOn        bool       // аккаунт WARP загружен, endpoint поднят
+	chainMu       sync.Mutex // вспомогательные звенья цепочек в движке (chain.go)
+	chainHelpers  map[string]bool
 	restored      *restoredActive          // итог restoreActive до первого Start
 	auth          atomic.Pointer[authSnap] // снимок токенов для Authenticate/CallerActive (authcache.go)
 	viaWarpMem    atomic.Int32             // кэш настройки check.via_warp (viaWarpUnknown/On/Off); сбрасывается при её записи
@@ -363,11 +365,17 @@ func (c *Core) ensureRegistered(id string) (string, error) {
 		return "", fmt.Errorf("узел %s: %w", short(id), err)
 	}
 	tag := NodeTag(id)
-	raw, err := outboundJSON(rec, tag, c.viaWarp())
+	raw, err := c.nodeOutboundJSON(rec, tag, c.viaWarp())
 	if err != nil {
 		return "", err
 	}
-	if c.nodeSrv.note(rec.Server) { // домен сервера — в набор правил DNS «local» до первого дозвона
+	fresh := false
+	for _, srv := range nodeServerNames(rec) { // у цепочки серверы всех звеньев
+		if c.nodeSrv.note(srv) { // домен сервера — в набор правил DNS «local» до первого дозвона
+			fresh = true
+		}
+	}
+	if fresh {
 		time.Sleep(nodeServersSettle)
 	}
 	if _, err := c.eng.Add(raw); err != nil {
@@ -495,7 +503,9 @@ func noteSavedActive(st *store.Store, ns *nodeServers) {
 		return
 	}
 	if rec, err := st.Node(sel.Node); err == nil {
-		ns.note(rec.Server)
+		for _, srv := range nodeServerNames(rec) {
+			ns.note(srv)
+		}
 	}
 }
 

@@ -708,8 +708,8 @@ func (c *Core) reportProbe(ctx context.Context, id string, viaWarp bool) (prober
 		return prober.Result{Level: 2, Class: prober.ClassOther, Detail: "узел исчез из базы"}, ""
 	}
 	opts := full.Opts
-	if viaWarp {
-		if opts, err = outboundJSON(full, "probe", true); err != nil {
+	if viaWarp || isChain(full) {
+		if opts, err = c.nodeOutboundJSON(full, "probe", viaWarp); err != nil {
 			return prober.Result{Level: 2, Class: prober.ClassOther, Detail: "опции узла"}, full.Server
 		}
 	}

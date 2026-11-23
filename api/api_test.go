@@ -1126,3 +1126,27 @@ func TestNodesETag(t *testing.T) {
 		t.Fatalf("список изменился, ждали 200 с новой меткой: %d, ETag %q", r3.StatusCode, r3.Header.Get("ETag"))
 	}
 }
+
+func TestChainEndpoints(t *testing.T) {
+	c, srv := newEnv(t)
+	user := client{t: t, base: srv.URL, tok: c.APIToken()}
+	a := user.ok("POST", "/v1/own-nodes", map[string]any{"text": "ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpwYXNzd29yZDEyMw@203.0.113.7:8388#a"})["ids"].([]any)[0].(string)
+	b := user.ok("POST", "/v1/own-nodes", map[string]any{"text": "ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpwYXNzd29yZDEyMw@203.0.113.8:8389#b"})["ids"].([]any)[0].(string)
+	user.expect(400, "POST", "/v1/chains", map[string]any{"hops": []string{a}})
+	user.expect(400, "POST", "/v1/chains", map[string]any{"hops": []string{a, a}})
+	got := user.ok("POST", "/v1/chains", map[string]any{"name": "Двойной", "hops": []string{a, b}})
+	id, _ := got["id"].(string)
+	if id == "" {
+		t.Fatalf("id цепочки: %v", got)
+	}
+	code, body := user.do("GET", "/v1/nodes", nil)
+	if code != 200 || !strings.Contains(string(body), `"proto":"chain"`) || !strings.Contains(string(body), `"label":"Двойной"`) || !strings.Contains(string(body), `"chain":[`) {
+		t.Fatalf("цепочка в списке узлов: %d %s", code, body)
+	}
+	if strings.Contains(string(body), "password") || strings.Contains(string(body), "chacha20") {
+		t.Fatalf("в списке узлов есть параметры доступа звеньев: %s", body)
+	}
+	user.ok("DELETE", "/v1/own-nodes/"+id, nil)
+	app := client{t: t, base: srv.URL, tok: user.ok("POST", "/v1/tokens", map[string]string{"name": "x"})["token"].(string)}
+	app.expect(403, "POST", "/v1/chains", map[string]any{"hops": []string{a, b}})
+}

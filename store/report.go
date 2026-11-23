@@ -83,7 +83,7 @@ func (s *Store) SampleNodes(perProto, protos int) ([]SampleNode, error) {
 	var pick []string
 	hasWG := false
 	for _, p := range ps {
-		if p.Present == 0 || p.Proto == "" {
+		if p.Present == 0 || p.Proto == "" || p.Proto == "chain" { // цепочки в выборку не берём: это не протокол, а составной узел
 			continue
 		}
 		if p.Proto == "wireguard" {

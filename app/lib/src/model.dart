@@ -1349,6 +1349,24 @@ class AppModel extends ChangeNotifier {
     return false;
   }
 
+  /// Создаёт цепочку прокси из узлов (от первого звена к выходу). После создания она в списке своих серверов и среди узлов.
+  Future<bool> addChain(String name, List<String> hops) async {
+    toast = null;
+    try {
+      await api.addChain(name, hops);
+      toast = 'Цепочка создана';
+      await loadOwn();
+      await loadNodes();
+      return true;
+    } on ApiException catch (e) {
+      _fail(e.message);
+    } catch (e) {
+      _fail('$e');
+    }
+    _notify();
+    return false;
+  }
+
   Future<void> removeOwn(NodeDto n) async {
     toast = null;
     try {

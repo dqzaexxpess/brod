@@ -2,7 +2,7 @@
 # Удаление Brod, установленного deploy/install-linux.sh.
 #
 #   deploy/uninstall-linux.sh             # приложение, команды, ярлык (данные остаются)
-#   deploy/uninstall-linux.sh --system    # + системные правила (NetworkManager, polkit; нужен sudo)
+#   deploy/uninstall-linux.sh --system    # + системная часть: помощник обновлений, демон в /usr/local, правила NetworkManager и polkit (нужен sudo)
 #   deploy/uninstall-linux.sh --purge     # + данные пользователя: узлы, выбор, WARP-аккаунт, настройки (спросит подтверждение)
 #
 # Перед удалением снимается киллсвитч, если правила остались.
@@ -43,9 +43,14 @@ command -v kbuildsycoca6 >/dev/null && kbuildsycoca6 >/dev/null 2>&1 || true
 echo "удалено: приложение, команды, ярлык"
 
 if [ "$SYSTEM" = 1 ]; then
+  # помощник обновлений, его политика polkit и демон из /usr/local ставит archive-system.sh; отдельного скрипта удаления после этого уже нет
+  # (каталог приложения стёрт выше), поэтому они убираются здесь. Работающего демона нет: проверено в начале
+  sudo rm -f /usr/local/libexec/brod/brod-helper /usr/local/libexec/brod/.brod-helper.* /usr/share/polkit-1/actions/dev.godbtw.brod.policy
+  sudo rmdir /usr/local/libexec/brod 2>/dev/null || true
+  sudo rm -rf /usr/local/lib/brod
   sudo rm -f /etc/NetworkManager/conf.d/90-brod.conf /etc/NetworkManager/conf.d/90-vpnclient.conf /etc/polkit-1/rules.d/50-brod-dns.rules /etc/polkit-1/rules.d/50-vpnclient-dns.rules
   sudo systemctl reload NetworkManager 2>/dev/null || true
-  echo "удалены системные правила (NetworkManager, polkit)"
+  echo "удалена системная часть: помощник обновлений, демон в /usr/local/lib/brod, правила NetworkManager и polkit"
 fi
 
 if [ "$PURGE" = 1 ]; then

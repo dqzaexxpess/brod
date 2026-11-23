@@ -697,6 +697,7 @@ class NodeDto {
     this.udpMs = 0,
     this.own = false,
     this.label = '',
+    this.chain = const [],
   });
 
   final String id;
@@ -717,6 +718,9 @@ class NodeDto {
   final double speedKBps; // скорость скачивания, КБ/с (0 — не замерялась)
   final String udp; // замер UDP в текущей сети: good | unstable | none; '' — нет свежего замера (годен ли узел для звонков)
   final int udpMs; // медиана задержки STUN-ответов, мс
+  final List<ChainHopDto> chain; // звенья, если это цепочка прокси
+
+  bool get isChain => proto == 'chain';
 
   /// Скорость в Мбит/с.
   double get speedMbps => speedKBps * 8 / 1024;
@@ -725,7 +729,10 @@ class NodeDto {
   String get signature => '$id|${l2At?.millisecondsSinceEpoch}|$favorite|$pinned|$own|$label|$youtube|$googleApi|${exit?.country}|${exit?.clean}|$latencyMs|${speedKBps.round()}|$udp';
 
   bool get alive => l2At != null;
-  String get address => port > 0 ? '$server:$port' : server;
+  String get address => isChain ? chainRoute : (port > 0 ? '$server:$port' : server);
+
+  /// Состав цепочки: «звено → звено → выход».
+  String get chainRoute => chain.map((h) => h.server).join(' → ');
   String get title => label.isNotEmpty ? label : address;
 
   factory NodeDto.fromJson(Map<String, dynamic> j) => NodeDto(
@@ -747,6 +754,24 @@ class NodeDto {
         udpMs: (j['udp_ms'] as num?)?.toInt() ?? 0,
         own: j['own'] == true,
         label: (j['label'] as String?) ?? '',
+        chain: [for (final h in (j['chain'] as List? ?? const [])) ChainHopDto.fromJson(h as Map<String, dynamic>)],
+      );
+}
+
+/// Звено цепочки прокси из `GET /v1/nodes`.
+class ChainHopDto {
+  const ChainHopDto({required this.id, required this.proto, required this.server, required this.port});
+
+  final String id;
+  final String proto;
+  final String server;
+  final int port;
+
+  factory ChainHopDto.fromJson(Map<String, dynamic> j) => ChainHopDto(
+        id: (j['id'] as String?) ?? '',
+        proto: (j['proto'] as String?) ?? '',
+        server: (j['server'] as String?) ?? '',
+        port: (j['port'] as num?)?.toInt() ?? 0,
       );
 }
 
@@ -775,7 +800,7 @@ class ActiveNode {
   @override
   int get hashCode => Object.hash(id, proto, server, port, country, clean, latencyMs, speedKBps.round(), udp, youtube, insecure, own, ip, label);
 
-  String get title => proto == 'warp' ? 'Cloudflare WARP' : (label.isNotEmpty ? label : (port > 0 ? '$proto · $server:$port' : '$proto · $server'));
+  String get title => proto == 'warp' ? 'Cloudflare WARP' : (label.isNotEmpty ? label : (proto == 'chain' ? 'Цепочка прокси' : (port > 0 ? '$proto · $server:$port' : '$proto · $server')));
 }
 
 /// Что демон делает сейчас: обновление подписок, круги проверки узлов и прокси Telegram (для индикации загрузки).
@@ -1087,6 +1112,7 @@ abstract class DaemonApi {
   Future<ProbeResult> probe({bool quick = false}); // quick — лёгкая проверка «выход поднялся» (два круга вместо пяти)
   Future<List<NodeDto>> nodes({bool alive = false, bool favorites = false, int limit = 300, String source = ''});
   Future<String> addOwn(String text); // человекочитаемый итог
+  Future<String> addChain(String name, List<String> hops); // цепочка прокси из узлов (от первого звена к выходу); возвращает id
   Future<void> removeOwn(String id);
   Future<String> nodeLink(String id); // ссылка «поделиться» (с секретами)
   Future<void> connectNode(String id);
@@ -1357,6 +1383,9 @@ class UnixApi implements DaemonApi {
     final added = r['added'] ?? 0, dup = r['duplicates'] ?? 0, failed = r['failed'] ?? 0;
     return 'Добавлено: $added${dup != 0 ? ', уже были: $dup' : ''}${failed != 0 ? ', не разобрано: $failed' : ''}';
   }
+
+  @override
+  Future<String> addChain(String name, List<String> hops) async => ((await _call('POST', '/v1/chains', {'name': name, 'hops': hops}))['id'] as String?) ?? '';
 
   @override
   Future<void> removeOwn(String id) async => _call('DELETE', '/v1/own-nodes/$id');

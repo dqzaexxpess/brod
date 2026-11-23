@@ -43,6 +43,7 @@ type NodeView struct {
 	UDP        string // good | unstable | none; пусто — нет свежего замера UDP в текущей сети («для звонков»)
 	UDPMs      int64  // медиана задержки STUN-ответов
 	UDPAt      time.Time
+	Chain      []ChainHopView // звенья, если это цепочка
 }
 
 // NodesQuery — выборка для списка.
@@ -87,6 +88,11 @@ func (c *Core) Nodes(q NodesQuery) ([]NodeView, error) {
 		out = append(out, NodeView{NodeInfo: nodeInfo(r), L2At: h.L2OK, GoogleAPI: !h.GoogleOK.IsZero() && !h.GoogleOK.Before(h.L2OK.Add(-time.Hour)),
 			YouTube: !h.L4OK.IsZero(), LastFail: h.LastFail, FirstSeen: r.FirstSeen, LastSeen: r.LastSeen, NoSecurity: r.NoSecurity, Notes: r.Notes,
 			Exit: exitView(exits, r.ID, !h.L4OK.IsZero()), LatencyMs: h.L2Ms, SpeedKBps: speeds[r.ID].KBps, SpeedAt: speeds[r.ID].At, Own: own[r.ID], Label: labels[r.ID]}.withUDP(c.udpFresh(udps[r.ID], now), udps[r.ID]))
+		if r.Proto == chainProto { // звенья цепочки лежат в Opts, которых в лёгкой записи списка нет
+			if full, err := c.st.Node(r.ID); err == nil {
+				out[len(out)-1].Chain = chainViewOf(full)
+			}
+		}
 	}
 	rank := func(v NodeView) int {
 		sc := 0

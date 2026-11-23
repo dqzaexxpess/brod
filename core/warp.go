@@ -241,7 +241,7 @@ func (c *Core) rechainActive() {
 		return
 	}
 	newTag := NodeTag(id) + "-d"
-	raw, err := outboundJSON(rec, newTag, false)
+	raw, err := c.nodeOutboundJSON(rec, newTag, false)
 	if err != nil {
 		return
 	}
@@ -271,6 +271,9 @@ func (c *Core) netKey() string {
 
 // probeOpts — опции узла для пробного outbound'а: при режиме через WARP добавляется detour (тот же код, что у боевого — P2).
 func (c *Core) probeOpts(rec store.NodeRec) ([]byte, error) {
+	if isChain(rec) {
+		return c.nodeOutboundJSON(rec, "probe", c.viaWarp())
+	}
 	if !c.viaWarp() {
 		return rec.Opts, nil
 	}

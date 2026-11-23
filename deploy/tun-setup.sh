@@ -20,9 +20,19 @@ VPND=${1:-bin/brodd}
 setcap cap_net_admin,cap_net_bind_service,cap_net_raw+ep "$VPND"
 getcap "$VPND"
 
-install -m 0644 deploy/NetworkManager-brod.conf /etc/NetworkManager/conf.d/90-brod.conf
-rm -f /etc/NetworkManager/conf.d/90-vpnclient.conf # прежнее имя файла: теперь правило в 90-brod.conf
-systemctl reload NetworkManager
+# NetworkManager и polkit есть не везде (серверы, systemd-networkd, минимальные установки): без них эти шаги не нужны и не должны обрывать установку
+if [ -d /etc/NetworkManager/conf.d ]; then
+  install -m 0644 deploy/NetworkManager-brod.conf /etc/NetworkManager/conf.d/90-brod.conf
+  rm -f /etc/NetworkManager/conf.d/90-vpnclient.conf # прежнее имя файла: теперь правило в 90-brod.conf
+  systemctl reload NetworkManager 2>/dev/null || true # не запущен или нет systemd — не ошибка
+else
+  echo "NetworkManager не найден: правило «интерфейс brod0 не под его управлением» пропущено"
+fi
+if [ ! -d /etc/polkit-1/rules.d ]; then
+  echo "нет /etc/polkit-1/rules.d (polkit не установлен): DNS системы в TUN направить не получится, остальное готово"
+  echo "готово: setcap"
+  exit 0
+fi
 
 cat > /etc/polkit-1/rules.d/50-brod-dns.rules <<RULES
 // Brod: демон пользователя $U сам направляет DNS системы в свой TUN-интерфейс (resolvectl).
@@ -36,4 +46,4 @@ polkit.addRule(function(action, subject) {
 RULES
 chmod 0644 /etc/polkit-1/rules.d/50-brod-dns.rules
 rm -f /etc/polkit-1/rules.d/50-vpnclient-dns.rules # прежнее имя файла
-echo "готово: setcap, NetworkManager, polkit"
+echo "готово: setcap, NetworkManager (если есть), polkit"

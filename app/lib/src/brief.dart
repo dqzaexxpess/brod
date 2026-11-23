@@ -13,6 +13,7 @@ const _protoNames = <String, String>{
   'tuic': 'TUIC',
   'wireguard': 'WireGuard',
   'warp': 'WARP',
+  'chain': 'Цепочка',
 };
 
 String protoName(String p) => _protoNames[p.toLowerCase()] ?? p.toUpperCase();

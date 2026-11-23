@@ -397,7 +397,9 @@ class NodeTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final busy = model.nodeBusy == node.id;
-    final line = '${node.proto}${node.label.isNotEmpty ? ' · ${node.address}' : ''} · ${ago(node.l2At)}';
+    final line = node.isChain
+        ? 'цепочка из ${node.chain.length}${node.label.isNotEmpty ? ' · ${node.address}' : ''} · ${ago(node.l2At)}'
+        : '${node.proto}${node.label.isNotEmpty ? ' · ${node.address}' : ''} · ${ago(node.l2At)}';
     return ListTile(
       selected: active,
       dense: compact,
@@ -453,8 +455,8 @@ class NodeTile extends StatelessWidget {
           },
           itemBuilder: (_) => [
             const PopupMenuItem(value: 'rename', child: ListTile(dense: true, leading: Icon(Icons.drive_file_rename_outline), title: Text('Переименовать'))),
-            if (node.own) const PopupMenuItem(value: 'edit', child: ListTile(dense: true, leading: Icon(Icons.edit_outlined), title: Text('Изменить сервер'))),
-            const PopupMenuItem(value: 'share', child: ListTile(dense: true, leading: Icon(Icons.share_outlined), title: Text('Поделиться ссылкой'))),
+            if (node.own && !node.isChain) const PopupMenuItem(value: 'edit', child: ListTile(dense: true, leading: Icon(Icons.edit_outlined), title: Text('Изменить сервер'))),
+            if (!node.isChain) const PopupMenuItem(value: 'share', child: ListTile(dense: true, leading: Icon(Icons.share_outlined), title: Text('Поделиться ссылкой'))),
             const PopupMenuItem(value: 'ping', child: ListTile(dense: true, leading: Icon(Icons.network_ping), title: Text('Проверить пинг'))),
             const PopupMenuItem(value: 'speed', child: ListTile(dense: true, leading: Icon(Icons.speed), title: Text('Замерить скорость'))),
             const PopupMenuItem(value: 'calls', child: ListTile(dense: true, leading: Icon(Icons.headset_mic_outlined), title: Text('Проверить для звонков'))),

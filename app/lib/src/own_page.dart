@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'model.dart';
+import 'node_dialogs.dart';
 import 'nodes_page.dart';
 
 /// Свои серверы (свой VPS и т. п.): добавление ссылкой или конфигом, список, выбор, удаление. Остальные операции (замеры, избранное) — как у обычных узлов.
@@ -59,7 +60,9 @@ class _OwnPageState extends State<OwnPage> {
         final cs = Theme.of(context).colorScheme;
         final activeId = m.status?.active?.id ?? '';
         return Scaffold(
-          appBar: AppBar(title: const Text('Мои серверы')),
+          appBar: AppBar(title: const Text('Мои серверы'), actions: [
+            IconButton(tooltip: 'Собрать цепочку из узлов', icon: const Icon(Icons.link), onPressed: () => chainDialog(context, m)),
+          ]),
           floatingActionButton: FloatingActionButton.extended(onPressed: _add, icon: const Icon(Icons.add), label: const Text('Добавить сервер')),
           body: Column(children: [
             SizedBox(height: 2, child: (m.ownLoading) ? const LinearProgressIndicator(minHeight: 2) : null),

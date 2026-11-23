@@ -305,7 +305,7 @@ func (c *Core) Alternatives(ctx context.Context, n int) ([]Candidate, error) {
 			tried[nd.ID] = true
 		}
 		var rest []store.NodeRec
-		for _, nd := range more {
+		for _, nd := range withoutChains(more) {
 			if !tried[nd.ID] {
 				rest = append(rest, nd)
 			}
@@ -336,6 +336,7 @@ func (c *Core) freshNodes(hist map[string]store.History, now time.Time, skip str
 		}
 		out = append(out, rs...)
 	}
+	out = withoutChains(out) // цепочки выбирает только пользователь
 	sort.SliceStable(out, func(i, j int) bool {
 		if !out[i].LastSeen.Equal(out[j].LastSeen) {
 			return out[i].LastSeen.After(out[j].LastSeen)
