@@ -1,5 +1,7 @@
 # Brod
 
+> **Brod** is a free VPN/proxy client for Linux, Windows and Android built on [sing-box-lx](https://github.com/Leadaxe/sing-box-lx). It collects free proxy subscriptions into one node database, checks the nodes on your own network and connects the one you pick, optionally through a Cloudflare WARP chain. GPL-3.0. Downloads: [Releases](https://github.com/dqzaexxpess/brod/releases/latest). The app and the documentation below are in Russian.
+
 VPN-клиент для Linux, Windows и Android на движке [sing-box-lx](https://github.com/Leadaxe/sing-box-lx). Собирает бесплатные подписки в одну базу узлов, проверяет их в вашей сети и подключает тот узел, который выбрали вы: сам он по умолчанию не меняется.
 
 Состав: демон `brodd`, командная строка `brodctl` и приложение на Flutter (интерфейс на русском). На Android ядро работает внутри приложения.
