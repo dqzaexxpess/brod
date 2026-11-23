@@ -22,6 +22,8 @@ class BrodVpnService : VpnService() {
     companion object {
         private const val CHANNEL = "brod_vpn"
         private const val NOTIFICATION_ID = 1
+        private const val ALERT_CHANNEL = "brod_alert"
+        private const val ALERT_ID = 2
         const val ACTION_DISCONNECT = "dev.godbtw.brod.DISCONNECT"
         const val ACTION_CONNECT = "dev.godbtw.brod.CONNECT"
 
@@ -121,6 +123,31 @@ class BrodVpnService : VpnService() {
             .build()
     }
 
+    /** Отдельное заметное уведомление (не то, что держит службу): VPN остановился без участия пользователя. */
+    private fun alert(title: String, text: String) {
+        val nm = getSystemService(NotificationManager::class.java)
+        nm.createNotificationChannel(NotificationChannel(ALERT_CHANNEL, "Важное о VPN", NotificationManager.IMPORTANCE_HIGH))
+        val open = PendingIntent.getActivity(this, 2, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
+        nm.notify(ALERT_ID, Notification.Builder(this, ALERT_CHANNEL)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setSmallIcon(R.drawable.ic_stat_brod)
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .build())
+    }
+
+    /** Включает VPN из службы (плитка, «Постоянный VPN», восстановление после гибели процесса). */
+    private fun connectFromService() = Thread {
+        try {
+            CoreHost.ensureStarted(applicationContext, withVpn = true)
+            if (!Androidcore.vpnOn()) Androidcore.connect("")
+        } catch (e: Throwable) {
+            Log.e("Brod", "подключение из службы: $e")
+            shutdown()
+        }
+    }.start()
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // на новых Android бросает исключение, если службу стартовали из фона без исключения; процесс из-за этого падать не должен
         try {
@@ -128,22 +155,28 @@ class BrodVpnService : VpnService() {
         } catch (e: Throwable) {
             Log.e("Brod", "startForeground: $e")
         }
-        when (intent?.action) {
+        // intent == null: систему перезапустила службу после того, как она убила процесс приложения (VPN при этом исчез без следа, и трафик пошёл напрямую).
+        // Если пользователь не выключал VPN и разрешение на VPN не отозвано, поднимаем его снова и сообщаем; иначе честно говорим, что VPN остановлен
+        if (intent == null) {
+            val wanted = CoreHost.vpnWanted(this)
+            if (wanted && VpnService.prepare(this) == null && CoreHost.allowRestore(this)) {
+                alert("VPN включён заново", "Система остановила Brod, VPN восстанавливается.")
+                connectFromService()
+                return START_STICKY
+            }
+            if (wanted) alert("VPN остановлен системой", "Нажмите, чтобы открыть Brod и включить его снова.")
+            CoreHost.setVpnWanted(this, false)
+            shutdown()
+            return START_NOT_STICKY
+        }
+        when (intent.action) {
             // кнопка «Отключить» в шторке и плитка: выключает VPN через ядро; службу останавливает слушатель состояния (CoreHost)
             ACTION_DISCONNECT -> Thread { runCatching { Androidcore.disconnect() } }.start()
             // плитка и «Постоянный VPN» (система стартует службу сама, например после перезагрузки): поднять ядро и подключиться
-            ACTION_CONNECT, SERVICE_INTERFACE -> Thread {
-                try {
-                    CoreHost.ensureStarted(applicationContext, withVpn = true)
-                    if (!Androidcore.vpnOn()) Androidcore.connect("")
-                } catch (e: Throwable) {
-                    Log.e("Brod", "подключение из службы: $e")
-                    shutdown()
-                }
-            }.start()
+            ACTION_CONNECT, SERVICE_INTERFACE -> connectFromService()
         }
-        // не STICKY: после убийства процесса системой ядро и туннель уже погибли, оживлять пустую службу с «VPN включён» нельзя
-        return START_NOT_STICKY
+        // STICKY: если система убьёт процесс, службу запустят снова (intent == null), и она восстановит VPN или сообщит об остановке (см. выше)
+        return START_STICKY
     }
 
     override fun onDestroy() {

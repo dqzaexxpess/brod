@@ -16,6 +16,8 @@ import (
 // не ломается, если подписка перестала отдавать узел). Движку цепочка предъявляется набором исходящих: последнее звено — сам выход (с тегом узла),
 // остальные — вспомогательные с тегами ch-… и detour друг на друга; первое звено при включённой цепочке через WARP идёт через WARP.
 // Автоподбор (лучший узел, альтернативы при деградации) цепочки не выбирает: их выбирает только пользователь.
+// WireGuard (в движке это endpoint, а не исходящий) допускается только первым звеном: он идёт напрямую по UDP, а следующие звенья пускаются через него.
+// После другого звена WireGuard не работает (UDP внутри TCP-туннеля), поэтому дальше первого места его не берём.
 
 const (
 	chainProto   = "chain"
@@ -46,6 +48,17 @@ type ChainHopView struct {
 }
 
 func isChain(r store.NodeRec) bool { return r.Proto == chainProto }
+
+// hopIsWG: звено — WireGuard (endpoint в движке).
+func hopIsWG(h ChainHop) bool {
+	if strings.EqualFold(h.Proto, "wireguard") {
+		return true
+	}
+	var t struct {
+		Type string `json:"type"`
+	}
+	return json.Unmarshal(h.Opts, &t) == nil && strings.EqualFold(t.Type, "wireguard")
+}
 
 func parseChain(r store.NodeRec) (chainSpec, error) {
 	var s chainSpec
@@ -125,8 +138,11 @@ func (c *Core) ensureChainHelpers(rec store.NodeRec, viaWarp bool) (string, erro
 		c.chainHelpers = map[string]bool{}
 	}
 	prev := ""
-	if viaWarp {
+	if viaWarp && !hopIsWG(s.Hops[0]) { // WireGuard первым звеном идёт напрямую: UDP через WARP не вкладываем
 		prev = OutWarp
+	}
+	if hopIsWG(s.Hops[0]) {
+		viaWarp = false // у цепочки с WireGuard первым звеном один набор звеньев: WARP на неё не влияет
 	}
 	for i := 0; i < len(s.Hops)-1; i++ {
 		tag := chainTag(rec.ID, viaWarp, i)
@@ -197,8 +213,8 @@ func (c *Core) AddChain(name string, hopIDs []string, initiator string) (string,
 		if isChain(rec) {
 			return "", fmt.Errorf("%w: цепочку нельзя вкладывать в цепочку", ErrInvalid)
 		}
-		if rec.Endpoint || strings.EqualFold(rec.Proto, "wireguard") {
-			return "", fmt.Errorf("%w: WireGuard в цепочку пока не берётся (другой тип в движке)", ErrInvalid)
+		if (rec.Endpoint || strings.EqualFold(rec.Proto, "wireguard")) && len(spec.Hops) > 0 {
+			return "", fmt.Errorf("%w: WireGuard может быть только первым звеном цепочки", ErrInvalid)
 		}
 		spec.Hops = append(spec.Hops, ChainHop{ID: rec.ID, Proto: rec.Proto, Server: rec.Server, Port: rec.Port, Opts: rec.Opts})
 	}

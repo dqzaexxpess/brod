@@ -29,7 +29,10 @@ type Config struct {
 	StateDir string // каталог состояния: база, кэш подписок, лог движка (создаётся с правами 0700)
 	LogLevel string // уровень лога движка (по умолчанию warn)
 	AppHost  string // адрес app-входа (по умолчанию 127.0.0.1)
-	AppPort  int    // порт app-входа mixed (по умолчанию 29080)
+	// AppListen — на каком адресе app-вход слушает, если не на AppHost (раздача в локальную сеть: 0.0.0.0). Свои обращения ядро делает на AppHost: на Windows
+	// подключиться к 0.0.0.0 нельзя.
+	AppListen string
+	AppPort   int // порт app-входа mixed (по умолчанию 29080)
 
 	Now   func() time.Time // часы (тесты)
 	NetID func() string    // идентификатор сети (по умолчанию store.NetID)
@@ -405,7 +408,7 @@ func engineConfig(c *Config, user, pass string, acc *warp.Account) ([]byte, erro
 	cfg := map[string]any{
 		"log": map[string]any{"level": c.LogLevel, "output": logPath, "timestamp": true},
 		"inbounds": []any{map[string]any{
-			"type": "mixed", "tag": InboundApp, "listen": c.AppHost, "listen_port": c.AppPort,
+			"type": "mixed", "tag": InboundApp, "listen": c.appListenAddr(), "listen_port": c.AppPort,
 			"users": []any{map[string]any{"username": user, "password": pass}},
 		}},
 		"outbounds": []any{
@@ -475,3 +478,11 @@ func loadWarpAccount(c *Config) (*warp.Account, error) {
 // источник отдаёт больше ста тысяч ссылок; потолок с запасом над этим, чтобы не ломать базу, но не давать источнику с миллионами
 // разных ссылок раздуть state.db и память обновления.
 const DefaultMaxNodes = 400_000
+
+// appListenAddr — адрес, на котором слушает app-вход: AppListen, если задан, иначе AppHost.
+func (c *Config) appListenAddr() string {
+	if c.AppListen != "" {
+		return c.AppListen
+	}
+	return c.AppHost
+}

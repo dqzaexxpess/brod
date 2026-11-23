@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'autostart.dart';
 import 'extras.dart';
@@ -255,6 +256,18 @@ class _SettingsPageState extends State<SettingsPage> {
               onChanged: (v) => m.setSetting('dns.fakeip', v ? '1' : '0'),
             ),
           const SizedBox(height: 8),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Раздавать прокси в локальную сеть'),
+            subtitle: const Text('Другие устройства сети (телевизор, консоль, второй компьютер) подключаются к Brod как к прокси и идут через ваш выход. Защита: логин и пароль'),
+            value: m.proxyLanOn,
+            onChanged: (v) async {
+              await m.setSetting('proxy.lan', v ? '1' : '0');
+              await m.loadProxyShare();
+            },
+          ),
+          if (m.proxyLanOn) _ProxyShareCard(model: m),
+          const SizedBox(height: 8),
           title('Списки блокировок'),
           ListTile(
             contentPadding: EdgeInsets.zero,
@@ -349,6 +362,17 @@ class _SettingsPageState extends State<SettingsPage> {
           title('Список узлов'),
           SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Плотный список узлов'), value: p.compact, onChanged: (v) => p.update(compact: v)),
           SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Группировать узлы по странам'), value: p.groupByCountry, onChanged: (v) => p.update(groupByCountry: v)),
+          if (Platform.isAndroid) ...[
+            const Divider(height: 32),
+            title('Добавление серверов'),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Предлагать добавить ссылку из буфера обмена'),
+              subtitle: const Text('При возврате в приложение: если скопирована ссылка на сервер (vless://, vmess://, trojan:// и т. п.). Android в этот момент показывает, что приложение читает буфер'),
+              value: p.clipboardImport,
+              onChanged: (v) => p.update(clipboardImport: v),
+            ),
+          ],
         ];
       case _Sec.system:
         final p = widget.prefs;
@@ -487,4 +511,72 @@ class _SegLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => FittedBox(fit: BoxFit.scaleDown, child: Text(text, maxLines: 1, softWrap: false));
+}
+
+/// Данные для подключения к раздаваемому прокси: адреса, логин и пароль, с копированием. Пароль показывается только по нажатию.
+class _ProxyShareCard extends StatefulWidget {
+  const _ProxyShareCard({required this.model});
+
+  final AppModel model;
+
+  @override
+  State<_ProxyShareCard> createState() => _ProxyShareCardState();
+}
+
+class _ProxyShareCardState extends State<_ProxyShareCard> {
+  bool _showPass = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.model.loadProxyShare();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return ListenableBuilder(
+      listenable: widget.model,
+      builder: (context, _) {
+        final s = widget.model.proxyShare;
+        if (s == null || !s.lan) {
+          return const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Text('Раздача включается: ядро перезапускается, данные появятся через несколько секунд.'));
+        }
+        Widget row(String k, String v, {bool secret = false}) => ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              title: Text(secret && !_showPass ? '••••••••••••' : v),
+              subtitle: Text(k),
+              trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                if (secret) IconButton(icon: Icon(_showPass ? Icons.visibility_off : Icons.visibility), tooltip: 'Показать', onPressed: () => setState(() => _showPass = !_showPass)),
+                IconButton(
+                  icon: const Icon(Icons.copy),
+                  tooltip: 'Копировать',
+                  onPressed: () async {
+                    await Clipboard.setData(ClipboardData(text: v));
+                    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$k скопирован')));
+                  },
+                ),
+              ]),
+            );
+        return Card.filled(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('SOCKS5 и HTTP на одном порту. Введите на другом устройстве:', style: Theme.of(context).textTheme.bodySmall),
+              if (s.endpoints.isEmpty) const Padding(padding: EdgeInsets.symmetric(vertical: 6), child: Text('Адресов в локальной сети не найдено: проверьте, что устройство в сети.')),
+              for (final e in s.endpoints) row('Адрес и порт', e),
+              row('Логин', s.username),
+              row('Пароль', s.password, secret: true),
+              const SizedBox(height: 4),
+              Text(
+                'Внимание: пароль в локальной сети передаётся без шифрования, а подключившийся пользуется вашим выходом. Включайте только в сети, где доверяете устройствам; в публичных сетях держите выключенным.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: cs.error),
+              ),
+            ]),
+          ),
+        );
+      },
+    );
+  }
 }

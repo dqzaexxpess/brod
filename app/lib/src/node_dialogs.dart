@@ -81,11 +81,11 @@ Future<void> editOwnDialog(BuildContext context, AppModel model, NodeDto n) asyn
   );
 }
 
-/// Звенья для цепочки: сначала свои серверы, затем остальные узлы (живые первыми). WireGuard и сами цепочки не берутся.
+/// Звенья для цепочки: сначала свои серверы, затем остальные узлы (живые первыми). Сами цепочки не берутся; WireGuard берётся, но только первым звеном.
 List<NodeDto> chainCandidates(AppModel model) {
   final seen = <String>{};
   final out = <NodeDto>[];
-  bool usable(NodeDto n) => !n.isChain && n.proto != 'wireguard' && n.proto != 'warp' && seen.add(n.id);
+  bool usable(NodeDto n) => !n.isChain && n.proto != 'warp' && seen.add(n.id);
   for (final n in model.ownNodes) {
     if (usable(n)) out.add(n);
   }
@@ -115,7 +115,7 @@ Future<void> chainDialog(BuildContext context, AppModel model) async {
           height: 480,
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(
-              'Трафик пойдёт через звенья по порядку: сначала первое, последним выход. Двух звеньев обычно достаточно: каждое следующее прибавляет задержку и риск, что цепочка не заработает (максимум три).',
+              'Трафик пойдёт через звенья по порядку: сначала первое, последним выход. Двух звеньев обычно достаточно: каждое следующее прибавляет задержку и риск, что цепочка не заработает (максимум три). WireGuard можно поставить только первым звеном.',
               style: Theme.of(ctx).textTheme.bodySmall,
             ),
             const SizedBox(height: 10),
@@ -141,9 +141,9 @@ Future<void> chainDialog(BuildContext context, AppModel model) async {
                       for (final n in shown)
                         ListTile(
                           dense: true,
-                          enabled: chosen.length < 3 && !chosen.any((c) => c.id == n.id),
+                          enabled: chosen.length < 3 && !chosen.any((c) => c.id == n.id) && (n.proto != 'wireguard' || chosen.isEmpty),
                           title: Text(n.title, overflow: TextOverflow.ellipsis),
-                          subtitle: Text('${n.proto}${n.own ? ' · свой' : ''}${n.alive ? ' · живой' : ''}'),
+                          subtitle: Text('${n.proto}${n.proto == 'wireguard' ? ' (только первым звеном)' : ''}${n.own ? ' · свой' : ''}${n.alive ? ' · живой' : ''}'),
                           onTap: () => setState(() => chosen.add(n)),
                         ),
                     ]),

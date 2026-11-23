@@ -30,6 +30,8 @@ class MainActivity : FlutterActivity() {
         const val MAX_LOG = 200 * 1024
     }
 
+    private var channel: MethodChannel? = null
+    private var pendingLink: String? = null // ссылка на узел из внешнего приложения (vless:// и т. п.), которую Dart ещё не забрал
     private var pendingVpn: MethodChannel.Result? = null
     private var pendingSave: MethodChannel.Result? = null
     private var pendingSaveContent: String = ""
@@ -45,7 +47,28 @@ class MainActivity : FlutterActivity() {
         // после убийства процесса системой запись службы и уведомление «VPN включён» остаются (службу держит привязка VPN-фреймворка), а ядра и
         // туннеля уже нет: в свежем процессе службы нет (instance == null), значит любая оставшаяся запись — мёртвая
         if (BrodVpnService.instance == null) stopService(Intent(this, BrodVpnService::class.java))
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result -> handle(call, result) }
+        channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).also { it.setMethodCallHandler { call, result -> handle(call, result) } }
+        rememberLink(intent)
+    }
+
+    /** Ссылка на узел из Intent (ACTION_VIEW со схемой узла): запоминается и сообщается Dart. */
+    private fun rememberLink(intent: Intent?) {
+        val d = intent?.data ?: return
+        if (intent.action != Intent.ACTION_VIEW) return
+        pendingLink = d.toString()
+        intent.data = null // повторный разбор того же Intent (поворот экрана) ссылку второй раз не предложит
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        rememberLink(intent)
+        val l = pendingLink ?: return
+        // приложение уже открыто: Dart получает ссылку сразу; если он не успел принять, она остаётся в pendingLink для takeLink
+        channel?.invokeMethod("link", l, object : MethodChannel.Result {
+            override fun success(r: Any?) { pendingLink = null }
+            override fun error(code: String, msg: String?, details: Any?) {}
+            override fun notImplemented() {}
+        })
     }
 
     private fun background(result: MethodChannel.Result, tag: String, block: () -> Any?) {
@@ -61,6 +84,9 @@ class MainActivity : FlutterActivity() {
 
     private fun handle(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
+            // ссылка на узел, с которой открыли приложение (null — не было); забирается один раз
+            "takeLink" -> { val l = pendingLink; pendingLink = null; result.success(l) }
+
             // ядро в процессе приложения: возвращает путь unix-сокета API
             "start" -> background(result, "start") { CoreHost.ensureStarted(applicationContext) }
 

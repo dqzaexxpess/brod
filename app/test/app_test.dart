@@ -366,6 +366,9 @@ class FakeApi implements DaemonApi {
   @override
   Future<WarpStateDto> warpState() async => const WarpStateDto();
 
+  @override
+  Future<ProxyShareDto> proxyShare() async => const ProxyShareDto(lan: true, addrs: ['192.168.1.5'], port: 29080, username: 'u', password: 'p');
+
   final chains = <(String, List<String>)>[];
 
   @override

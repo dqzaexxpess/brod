@@ -12,6 +12,7 @@ import 'daemon.dart';
 import 'daemon_errors.dart';
 import 'opener.dart';
 import 'platform_paths.dart';
+import 'link_import.dart';
 import 'private_file.dart';
 import 'timing.dart';
 
@@ -729,6 +730,7 @@ class AppModel extends ChangeNotifier {
       : 'Поиск уже идёт.';
 
   bool get killswitchOn => settings['killswitch.enabled'] != '0'; // по умолчанию включён
+  bool get proxyLanOn => settings['proxy.lan'] == '1'; // раздача прокси в локальную сеть, по умолчанию выключена
   bool get fakeipOn => settings['dns.fakeip'] == '1'; // «Быстрый DNS» (эксперимент), по умолчанию выключен
   String get degradeAction => settings['degrade.action'] ?? 'notify';
   String get notifyLevel => settings['notify.level'] ?? 'important';
@@ -1347,6 +1349,41 @@ class AppModel extends ChangeNotifier {
     }
     _notify();
     return false;
+  }
+
+  /// Данные для подключения других устройств к прокси (после включения раздачи ядро перезапускается: данные читаются после перезапуска).
+  ProxyShareDto? proxyShare;
+
+  Future<void> loadProxyShare() async {
+    try {
+      proxyShare = await api.proxyShare();
+      _notify();
+    } catch (_) {}
+  }
+
+  /// Ссылка на узел, которую предлагаем добавить (из другого приложения или из буфера обмена): оболочка показывает вопрос и очищает поле.
+  String? importOffer;
+  String? _lastClipOffer; // последняя ссылка из буфера, о которой уже спрашивали: повторно не предлагаем
+
+  /// Предложить добавить узел по ссылке. Ссылка из внешнего приложения предлагается всегда; из буфера — один раз на ссылку.
+  void offerImport(String link, {bool fromClipboard = false}) {
+    if (!looksLikeNodeLink(link)) return;
+    final l = link.trim();
+    if (fromClipboard) {
+      if (l == _lastClipOffer) return;
+      _lastClipOffer = l;
+    }
+    importOffer = l;
+    _notify();
+  }
+
+  /// Проверяет буфер обмена и предлагает добавить узел, если там ссылка (при возврате в приложение).
+  Future<void> checkClipboard() async {
+    try {
+      final d = await Clipboard.getData(Clipboard.kTextPlain);
+      final t = d?.text;
+      if (looksLikeNodeLink(t)) offerImport(t!, fromClipboard: true);
+    } catch (_) {}
   }
 
   /// Создаёт цепочку прокси из узлов (от первого звена к выходу). После создания она в списке своих серверов и среди узлов.

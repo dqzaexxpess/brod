@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -343,5 +344,81 @@ func TestChainAsActiveNode(t *testing.T) {
 	}
 	if _, err := c.eng.Existing(chainTag(id, false, 0)); err == nil {
 		t.Error("звено осталось в движке")
+	}
+}
+
+// wgNode кладёт в базу WireGuard-узел (endpoint в движке) с заведомо рабочими по форме ключами и адресом на закрытом локальном порту.
+func wgNode(t *testing.T, c *Core, key string, port int) string {
+	t.Helper()
+	k := func(b byte) string {
+		raw := make([]byte, 32)
+		for i := range raw {
+			raw[i] = b + byte(i)
+		}
+		return base64.StdEncoding.EncodeToString(raw)
+	}
+	opts, _ := json.Marshal(map[string]any{
+		"type": "wireguard", "address": []string{"10.7.0.2/32"}, "private_key": k(1),
+		"peers": []map[string]any{{"address": "127.0.0.1", "port": port, "public_key": k(40), "allowed_ips": []string{"0.0.0.0/0"}}},
+	})
+	id := store.NodeID(key)
+	now := time.Now()
+	if err := c.st.UpsertNodes("src", now.UnixNano(), []store.NodeRec{{ID: id, Class: "wireguard/udp/none", Proto: "wireguard", Endpoint: true, Server: "127.0.0.1", Port: port, Opts: opts}}, now); err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
+// WireGuard допускается только первым звеном; тогда он регистрируется как endpoint, следующее звено идёт через него (detour), без WARP.
+// Нужен движок с WireGuard (теги из scripts/tags.txt): без него тест пропускается.
+func TestChainWireGuardAsFirstHop(t *testing.T) {
+	c := newCore(t, t.TempDir())
+	t.Cleanup(func() { c.Close() })
+	wg := wgNode(t, c, "wg-first", 51820)
+	wg2 := wgNode(t, c, "wg-second", 51821)
+	s := socksNode(t, c, "wg-socks", 9, "socks")
+	if _, err := c.AddChain("", []string{s, wg}, "test"); !errors.Is(err, ErrInvalid) {
+		t.Errorf("WireGuard вторым звеном принят: %v", err)
+	}
+	if _, err := c.AddChain("", []string{wg, wg2}, "test"); !errors.Is(err, ErrInvalid) {
+		t.Errorf("два WireGuard принято: %v", err)
+	}
+	id, err := c.AddChain("", []string{wg, s}, "test")
+	if err != nil {
+		t.Fatalf("WireGuard первым звеном: %v", err)
+	}
+	rec, _ := c.st.Node(id)
+	raw, err := c.nodeOutboundJSON(rec, "exit-tag", true) // с WARP: первое звено всё равно без него
+	if err != nil {
+		if strings.Contains(err.Error(), "not included") || strings.Contains(err.Error(), "WireGuard") {
+			t.Skip("в сборке нет WireGuard: запустите тест с -tags \"$(cat scripts/tags.txt)\"")
+		}
+		t.Fatal(err)
+	}
+	var m map[string]any
+	_ = json.Unmarshal(raw, &m)
+	if m["detour"] != chainTag(id, false, 0) {
+		t.Fatalf("выход должен идти через WireGuard-звено: %s", raw)
+	}
+	if _, err := c.eng.Existing(chainTag(id, false, 0)); err != nil {
+		t.Errorf("WireGuard-звено не зарегистрировано: %v", err)
+	}
+	if _, err := c.eng.Existing(chainTag(id, true, 0)); err == nil {
+		t.Error("для WireGuard-первого не должно быть отдельного набора «через WARP»")
+	}
+	opts, err := c.probeOpts(rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := c.eng.NewProbe(opts)
+	if err != nil {
+		t.Fatalf("пробный outbound цепочки с WireGuard: %v", err)
+	}
+	p.Close()
+	if err := c.RemoveOwn(id, "test"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.eng.Existing(chainTag(id, false, 0)); err == nil {
+		t.Error("WireGuard-звено осталось в движке после удаления цепочки")
 	}
 }

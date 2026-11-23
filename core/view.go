@@ -289,6 +289,7 @@ var settingRules = map[string]func(string) error{
 	SetAutoGroup:             boolSetting,
 	SetKillswitch:            boolSetting,
 	SetFakeIP:                boolSetting,
+	SetProxyLAN:              boolSetting,
 	SetAppsMode:              appsModeSetting,
 	SetWarpAuto:              boolSetting,
 	SetWarpEndpoint:          warpEndpointSetting,
@@ -383,6 +384,10 @@ const SetDegradeAction = "degrade.action"
 // SetKillswitch — файрвольный киллсвитч (пакет killswitch): при включённом VPN в режимах «всё» и «всё, кроме РФ» трафик мимо туннеля блокируется,
 // в том числе после падения демона. 1 или 0; по умолчанию — killswitchDefaultOn.
 const SetKillswitch = "killswitch.enabled"
+
+// SetProxyLAN — раздача прокси в локальную сеть (1 или 0, по умолчанию 0): app-вход (SOCKS5 и HTTP на одном порту, с логином и паролем) слушает на всех
+// адресах, и к нему подключаются другие устройства сети (телевизор, консоль, второй компьютер). Читается при создании ядра.
+const SetProxyLAN = "proxy.lan"
 
 func degradeActionSetting(v string) error {
 	switch v {

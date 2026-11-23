@@ -15,6 +15,26 @@ object CoreHost {
     private var listenerSet = false
     private var wasOn = false
 
+    private const val PREFS = "service"
+
+    /** Пользователь включил VPN и не выключал: после гибели процесса (система убила приложение) VPN нужно поднять заново. */
+    fun vpnWanted(ctx: Context): Boolean = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("vpn_wanted", false)
+
+    fun setVpnWanted(ctx: Context, on: Boolean) {
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean("vpn_wanted", on).apply()
+    }
+
+    /** Можно ли ещё раз восстанавливать VPN после гибели процесса: не больше трёх раз за десять минут (иначе постоянная гибель превратилась бы в цикл). */
+    @Synchronized
+    fun allowRestore(ctx: Context): Boolean {
+        val p = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        val recent = (p.getString("restore_at", "") ?: "").split(",").mapNotNull { it.toLongOrNull() }.filter { now - it < 600_000 }
+        if (recent.size >= 3) return false
+        p.edit().putString("restore_at", (recent + now).joinToString(",")).apply()
+        return true
+    }
+
     @Synchronized
     fun platform(ctx: Context): Platform = platform ?: Platform(ctx.applicationContext).also { platform = it }
 
@@ -37,6 +57,7 @@ object CoreHost {
             // служба переднего плана (и её уведомление) живёт, пока VPN включён; первое сообщение слушателя — текущее состояние, его не считаем выключением
             Androidcore.setStateListener(object : StateListener {
                 override fun onVPN(on: Boolean) {
+                    setVpnWanted(app, on)
                     if (on) {
                         wasOn = true
                     } else if (wasOn) {

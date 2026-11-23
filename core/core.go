@@ -9,9 +9,11 @@ import (
 	"fmt"
 	"github.com/sagernet/sing-box/common/trafficcontrol"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -156,6 +158,9 @@ func New(cfg Config) (*Core, error) {
 		st.Close()
 		return nil, err
 	}
+	if v, _, _ := st.Setting(SetProxyLAN); v == "1" && cfg.AppListen == "" {
+		cfg.AppListen = "0.0.0.0" // раздача в локальную сеть
+	}
 	if cfg.TUN.Enabled && !cfg.TUN.FakeIP {
 		if v, _, _ := st.Setting(SetFakeIP); v == "1" {
 			cfg.TUN.FakeIP = true
@@ -267,6 +272,48 @@ func (c *Core) Engine() *engine.Engine { return c.eng }
 // AppProxy возвращает адрес и учётные данные app-входа (секрет: показывать только по явной команде владельца).
 func (c *Core) AppProxy() (addr, user, pass string) {
 	return fmt.Sprintf("%s:%d", c.cfg.AppHost, c.cfg.AppPort), c.appUser, c.appPass
+}
+
+// ProxyShare — сведения для подключения других устройств к app-входу: включена ли раздача, адреса этого компьютера в локальных сетях, порт и учётные данные.
+type ProxyShare struct {
+	Enabled bool
+	Addrs   []string // IPv4-адреса интерфейсов, на которые можно подключиться
+	Port    int
+	User    string
+	Pass    string
+}
+
+// ProxyShare возвращает данные раздачи прокси (секрет: показывать только владельцу).
+func (c *Core) ProxyShare() ProxyShare {
+	p := ProxyShare{Enabled: c.cfg.AppListen != "" && c.cfg.AppListen != c.cfg.AppHost, Port: c.cfg.AppPort, User: c.appUser, Pass: c.appPass}
+	if p.Enabled {
+		p.Addrs = lanAddrs()
+	}
+	return p
+}
+
+// lanAddrs — частные IPv4-адреса работающих интерфейсов (кроме loopback и туннелей): по ним устройства сети находят этот компьютер.
+func lanAddrs() []string {
+	var out []string
+	ifs, err := net.Interfaces()
+	if err != nil {
+		return nil
+	}
+	for _, ifc := range ifs {
+		if ifc.Flags&net.FlagUp == 0 || ifc.Flags&net.FlagLoopback != 0 || strings.HasPrefix(ifc.Name, "brod") || strings.HasPrefix(ifc.Name, "tun") {
+			continue
+		}
+		addrs, _ := ifc.Addrs()
+		for _, a := range addrs {
+			if ipn, ok := a.(*net.IPNet); ok {
+				if ip := ipn.IP.To4(); ip != nil && ip.IsPrivate() {
+					out = append(out, ip.String())
+				}
+			}
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // Start восстанавливает сохранённый выбор и запускает фоновые задания. Не блокируется на сети (P3: старт ≤1 с).

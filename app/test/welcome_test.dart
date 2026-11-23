@@ -28,6 +28,7 @@ void main() {
     var done = 0;
     await _open(t, const WarpStateDto(enabled: true), () => done++);
     expect(find.text('Добро пожаловать в Brod'), findsOneWidget);
+    expect(find.textContaining('Серверы из бесплатных подписок чужие'), findsOneWidget, reason: 'предупреждение о доверии к чужим серверам на первом шаге');
     await t.tap(find.text('Дальше'));
     await t.pump();
     expect(find.textContaining('WARP работает'), findsOneWidget);
@@ -35,6 +36,7 @@ void main() {
     await t.tap(find.text('Дальше'));
     await t.pump();
     expect(find.text('Подключиться к лучшему узлу'), findsOneWidget);
+    expect(find.textContaining('Переключать сам'), findsOneWidget, reason: 'в мастере сказано, что автозамену узла можно включить');
     await t.tap(find.text('Дальше'));
     await t.pump();
     expect(find.text('Что где'), findsOneWidget);

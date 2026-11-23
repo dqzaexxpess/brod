@@ -722,6 +722,9 @@ func (s *Server) putSetting(w http.ResponseWriter, r *http.Request) {
 	if (strings.HasPrefix(r.PathValue("key"), "tun.") || r.PathValue("key") == core.SetFakeIP) && s.VPN != nil {
 		_, _ = s.VPN.Reload() // список приложений читается при создании ядра; включённый VPN перезапускается, выключенный подхватит при включении
 	}
+	if r.PathValue("key") == core.SetProxyLAN && s.VPN != nil {
+		_, _ = s.VPN.Restart() // адрес прослушивания читается при создании ядра
+	}
 	if strings.HasPrefix(r.PathValue("key"), "warp.") && s.VPN != nil {
 		_, _ = s.VPN.Restart() // параметры WARP читаются при создании ядра, а WARP работает и при выключенном VPN (проверки узлов идут через него)
 	}
@@ -766,7 +769,12 @@ func (s *Server) appProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	addr, user, pass := s.core().AppProxy()
-	writeJSON(w, 200, map[string]string{"addr": addr, "username": user, "password": pass})
+	share := s.core().ProxyShare()
+	addrs := share.Addrs
+	if addrs == nil {
+		addrs = []string{}
+	}
+	writeJSON(w, 200, map[string]any{"addr": addr, "username": user, "password": pass, "lan": share.Enabled, "lan_addrs": addrs, "port": share.Port})
 }
 
 func (s *Server) tokens(w http.ResponseWriter, r *http.Request) {

@@ -12,6 +12,17 @@ class AppInfo {
 class AndroidCore {
   static const _ch = MethodChannel('dev.godbtw.brod/core');
 
+  /// Ссылка на узел, с которой открыли приложение (vless:// и т. п. из другого приложения); null — не было. Забирается один раз.
+  static Future<String?> takeLink() async => _ch.invokeMethod<String>('takeLink');
+
+  /// Ссылка на узел пришла, пока приложение уже открыто.
+  static void listenLinks(void Function(String link) onLink) {
+    _ch.setMethodCallHandler((call) async {
+      if (call.method == 'link' && call.arguments is String) onLink(call.arguments as String);
+      return null;
+    });
+  }
+
   /// Запускает встроенное ядро и возвращает путь unix-сокета API.
   static Future<String> start() async => (await _ch.invokeMethod<String>('start'))!;
 

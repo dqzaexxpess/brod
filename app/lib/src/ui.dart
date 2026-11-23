@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'home_page.dart';
+import 'link_import.dart';
 import 'extras.dart';
 import 'model.dart';
 import 'monitor_page.dart';
@@ -83,10 +84,40 @@ class _ShellState extends State<Shell> {
   /// Единственное место, где показываются сообщения о результатах действий: забирает сообщение из модели и очищает его, поэтому
   /// оно не повторяется при переходе на другую страницу.
   void _onModel() {
+    _offerImport();
     final t = widget.model.takeToast();
     if (t == null) return;
     Future.microtask(() {
       if (mounted) showToast(context, t.$1, error: t.$2);
+    });
+  }
+
+  bool _importOpen = false;
+
+  /// Ссылка на узел (из другого приложения или из буфера обмена): спрашиваем, добавить ли её в «Мои серверы».
+  void _offerImport() {
+    final link = widget.model.importOffer;
+    if (link == null || _importOpen) return;
+    _importOpen = true;
+    widget.model.importOffer = null;
+    Future.microtask(() async {
+      if (!mounted) {
+        _importOpen = false;
+        return;
+      }
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Добавить сервер?'),
+          content: Text('Ссылка на сервер: ${nodeLinkSummary(link)}.\nОн появится в «Моих серверах».'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Нет')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Добавить')),
+          ],
+        ),
+      );
+      _importOpen = false;
+      if (ok == true) await widget.model.addOwn(link);
     });
   }
 

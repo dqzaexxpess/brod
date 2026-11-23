@@ -62,6 +62,29 @@ jobs:
           go build -tags "$(cat scripts/tags.txt)" -trimpath -ldflags=-checklinkname=0 -o /dev/null ./cmd/brodd
           go build -tags "$(cat scripts/tags.txt)" -trimpath -o /dev/null ./cmd/brodctl
 
+  # Windows ломался чаще остальных платформ, а проверялся только кросс-сборкой: здесь запускаются тесты пакетов, у которых есть Windows-код
+  # (фильтры WFP киллсвитча, загрузчик установщика, обновление), на настоящем Windows
+  go-windows:
+    name: "Go: тесты Windows-пакетов"
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Исходники движка
+        run: scripts/fetch-engine.sh
+
+      - name: Тесты Windows-пакетов
+        run: go test -count=1 -tags "$(cat scripts/tags.txt)" ./killswitch ./cmd/brodsetup ./updater ./paths ./buildinfo/...
+
   flutter:
     name: "Flutter: analyze и test"
     runs-on: ubuntu-latest

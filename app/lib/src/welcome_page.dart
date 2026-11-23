@@ -94,6 +94,23 @@ class _WelcomeFlowState extends State<WelcomeFlow> {
         const Text('Brod собирает бесплатные прокси-подписки в одну базу, проверяет узлы в вашей сети и подключает тот, что работает лучше всего.'),
         const SizedBox(height: 12),
         const Text('Узлов в базе тысячи, большинство из них не работает. Проверки как раз и отделяют живые от мёртвых: на это нужно время, поэтому первые минуты после установки список заполняется постепенно.'),
+        const SizedBox(height: 16),
+        Card.filled(
+          color: Theme.of(context).colorScheme.tertiaryContainer,
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Icon(Icons.warning_amber_rounded, color: Theme.of(context).colorScheme.onTertiaryContainer),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Серверы из бесплатных подписок чужие. Их владелец видит, на какие сайты вы заходите, а на сайтах без шифрования (http://) может читать и подменять то, что вы отправляете и получаете. Не вводите через такие серверы пароли на сайтах без https и не входите в банки; для важного используйте свой сервер или обычное соединение.',
+                  style: TextStyle(color: Theme.of(context).colorScheme.onTertiaryContainer),
+                ),
+              ),
+            ]),
+          ),
+        ),
       ]);
 
   Widget _warp(BuildContext context) {
@@ -153,6 +170,8 @@ class _WelcomeFlowState extends State<WelcomeFlow> {
         ),
         const SizedBox(height: 12),
         Text('Узел можно сменить в любой момент: вкладка «Узлы» или меню ⋮ на главной.', style: Theme.of(context).textTheme.bodySmall),
+        const SizedBox(height: 12),
+        const Text('Если выбранный узел перестанет отвечать, Brod пришлёт уведомление с предложением, а менять узел вы будете сами. Чтобы он менялся автоматически на проверенный, включите «Переключать сам» в Настройки → «Если выход перестал отвечать».'),
       ]);
 
   Widget _tour(BuildContext context) {

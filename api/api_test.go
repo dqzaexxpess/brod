@@ -1150,3 +1150,17 @@ func TestChainEndpoints(t *testing.T) {
 	app := client{t: t, base: srv.URL, tok: user.ok("POST", "/v1/tokens", map[string]string{"name": "x"})["token"].(string)}
 	app.expect(403, "POST", "/v1/chains", map[string]any{"hops": []string{a, b}})
 }
+
+func TestProxyLANSettingAndShareInfo(t *testing.T) {
+	c, srv := newEnv(t)
+	user := client{t: t, base: srv.URL, tok: c.APIToken()}
+	got := user.ok("GET", "/v1/app-proxy", nil)
+	if got["lan"] != false || got["port"] == nil || got["username"] == "" {
+		t.Fatalf("app-proxy по умолчанию: %v", got)
+	}
+	user.expect(400, "PUT", "/v1/settings/proxy.lan", map[string]string{"value": "да"})
+	user.ok("PUT", "/v1/settings/proxy.lan", map[string]string{"value": "1"})
+	app := client{t: t, base: srv.URL, tok: user.ok("POST", "/v1/tokens", map[string]string{"name": "x"})["token"].(string)}
+	app.expect(403, "GET", "/v1/app-proxy", nil) // учётные данные раздачи видит только владелец
+	app.expect(403, "PUT", "/v1/settings/proxy.lan", map[string]string{"value": "0"})
+}

@@ -40,6 +40,22 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- маршрутизацию Flutter по ссылкам отключаем: ссылку на узел забирает сама программа (MainActivity.takeLink), а не навигатор -->
+            <meta-data android:name="flutter_deeplinking_enabled" android:value="false"/>
+            <!-- ссылки на узлы (vless://, vmess:// и т. д.) из Telegram, браузера и других приложений: Brod предлагает добавить узел -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="vless"/>
+                <data android:scheme="vmess"/>
+                <data android:scheme="trojan"/>
+                <data android:scheme="ss"/>
+                <data android:scheme="hysteria2"/>
+                <data android:scheme="hy2"/>
+                <data android:scheme="tuic"/>
+                <data android:scheme="wireguard"/>
+            </intent-filter>
         </activity>
         <service
             android:name=".BrodTileService"

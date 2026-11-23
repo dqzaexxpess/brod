@@ -1113,6 +1113,7 @@ abstract class DaemonApi {
   Future<List<NodeDto>> nodes({bool alive = false, bool favorites = false, int limit = 300, String source = ''});
   Future<String> addOwn(String text); // человекочитаемый итог
   Future<String> addChain(String name, List<String> hops); // цепочка прокси из узлов (от первого звена к выходу); возвращает id
+  Future<ProxyShareDto> proxyShare(); // раздача прокси в локальную сеть: включена ли, адреса, порт, логин и пароль (секрет)
   Future<void> removeOwn(String id);
   Future<String> nodeLink(String id); // ссылка «поделиться» (с секретами)
   Future<void> connectNode(String id);
@@ -1383,6 +1384,9 @@ class UnixApi implements DaemonApi {
     final added = r['added'] ?? 0, dup = r['duplicates'] ?? 0, failed = r['failed'] ?? 0;
     return 'Добавлено: $added${dup != 0 ? ', уже были: $dup' : ''}${failed != 0 ? ', не разобрано: $failed' : ''}';
   }
+
+  @override
+  Future<ProxyShareDto> proxyShare() async => ProxyShareDto.fromJson(await _call('GET', '/v1/app-proxy'));
 
   @override
   Future<String> addChain(String name, List<String> hops) async => ((await _call('POST', '/v1/chains', {'name': name, 'hops': hops}))['id'] as String?) ?? '';
@@ -1782,5 +1786,27 @@ class ReportStateDto {
         error: '${j['error'] ?? ''}',
         text: '${j['text'] ?? ''}',
         json: (j['report'] as Map?)?.cast<String, dynamic>() ?? const {},
+      );
+}
+
+/// Данные для подключения других устройств к прокси приложения (`GET /v1/app-proxy`).
+class ProxyShareDto {
+  const ProxyShareDto({this.lan = false, this.addrs = const [], this.port = 0, this.username = '', this.password = ''});
+
+  final bool lan; // раздача в локальную сеть включена
+  final List<String> addrs; // адреса этого устройства в локальных сетях
+  final int port;
+  final String username;
+  final String password;
+
+  /// Адреса «ip:порт» для ввода на другом устройстве.
+  List<String> get endpoints => [for (final a in addrs) '$a:$port'];
+
+  factory ProxyShareDto.fromJson(Map<String, dynamic> j) => ProxyShareDto(
+        lan: j['lan'] == true,
+        addrs: [for (final a in (j['lan_addrs'] as List? ?? const [])) '$a'],
+        port: (j['port'] as num?)?.toInt() ?? 0,
+        username: (j['username'] as String?) ?? '',
+        password: (j['password'] as String?) ?? '',
       );
 }
