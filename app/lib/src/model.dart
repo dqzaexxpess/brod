@@ -654,15 +654,32 @@ class AppModel extends ChangeNotifier {
   Future<void> loadSettings() async {
     settingsLoading = true;
     _notify();
+    // настройки и источники запрашиваются одновременно, а настройки показываются сразу, не дожидаясь источников (они тяжелее)
+    final src = api.sources();
+    var failed = false;
     try {
-      sources = await api.sources();
       settings = await api.settings();
     } catch (e) {
+      failed = true;
       _fail('Настройки не загрузились: $e');
+    }
+    settingsLoading = false;
+    _notify();
+    try {
+      sources = await src;
+    } catch (e) {
+      if (!failed) _fail('Источники не загрузились: $e');
     } finally {
-      settingsLoading = false;
       _notify();
     }
+  }
+
+  /// Тихо перечитывает только настройки (без полосы загрузки): после изменения, чтобы подтянуть то, что демон поменял сам.
+  Future<void> _refreshSettingsQuietly() async {
+    try {
+      settings = await api.settings();
+      _notify();
+    } catch (_) {}
   }
 
   Future<void> _act(Future<void> Function() f, {String? ok}) async {
@@ -742,7 +759,24 @@ class AppModel extends ChangeNotifier {
   String get degradeAction => settings['degrade.action'] ?? 'notify';
   String get notifyLevel => settings['notify.level'] ?? 'important';
 
-  Future<void> setSetting(String key, String value) => _act(() => api.putSetting(key, value));
+  /// Меняет настройку: новое значение видно сразу (не ждём запись и перезагрузку), при ошибке возвращается прежнее и показывается причина.
+  Future<void> setSetting(String key, String value) async {
+    final before = settings;
+    settings = {...settings, key: value};
+    toast = null;
+    _notify();
+    try {
+      await api.putSetting(key, value);
+    } on ApiException catch (e) {
+      settings = before;
+      _fail(e.message);
+    } catch (e) {
+      settings = before;
+      _fail('$e');
+    }
+    _notify();
+    await _refreshSettingsQuietly();
+  }
 
   /// Автоподключение при запуске демона: last | always | off (действует со следующего запуска, текущее состояние VPN не меняется).
   Future<void> setAutoconnect(String value) => _act(() async {
